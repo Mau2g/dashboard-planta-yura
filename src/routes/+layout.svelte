@@ -1,39 +1,65 @@
 <script lang="ts">
-  import './layout.css';
+  import '../app.css';
   import { page } from '$app/stores';
   import { fechaSeleccionada } from '$lib/stores';
+  import ThemeToggle from '$lib/components/ThemeToggle.svelte';
+  import Toast from '$lib/components/Toast.svelte';
+  import { Factory, LayoutDashboard, ClipboardList } from 'lucide-svelte';
 
   let { children } = $props();
-
-  const tabs = [
-    { href: '/registro', label: '📝 Registro Diario' },
-    { href: '/', label: '📊 Dashboard KPIs' },
-    { href: '/config', label: '⚙️ Configuración' },
-    { href: '/avanzado', label: '🚀 Vista Avanzada' }
+  const nav = [
+    { href: '/', label: 'Dashboard', icon: LayoutDashboard },
+    { href: '/registro', label: 'Registro', icon: ClipboardList }
   ];
+  const activo = (href: string) => $page.url.pathname === href;
 </script>
 
-<div class="mx-auto max-w-[1400px] overflow-hidden rounded-[28px] bg-white shadow-[0_8px_20px_rgba(0,0,0,0.1)] my-5">
-  <header class="bg-gradient-to-br from-yura to-yura-dark px-5 py-5 text-center text-white">
-    <h1 class="flex items-center justify-center gap-2 text-2xl font-bold">🏭 Gestión Integral Planta Yura</h1>
-    <div class="mt-3 flex flex-wrap justify-center gap-3">
-      <input type="date" bind:value={$fechaSeleccionada}
-        class="rounded-full border border-white bg-white/20 px-4 py-2 text-sm text-white" />
-    </div>
-  </header>
+<div class="relative min-h-dvh">
+  <div class="bp-grid absolute inset-0 -z-10"></div>
 
-  <nav class="flex border-b border-slate-200 bg-slate-50">
-    {#each tabs as t}
-      {@const activo = t.href === '/avanzado' ? $page.url.pathname.startsWith('/avanzado') : $page.url.pathname === t.href}
-      <a href={t.href}
-        class="flex-1 px-4 py-4 text-center font-semibold transition
-          {activo ? 'border-b-[3px] border-yura bg-white text-yura' : 'text-slate-600'}">
-        {t.label}
+  <!-- Sidebar (desktop) -->
+  <aside class="fixed inset-y-0 left-0 z-30 hidden w-60 flex-col border-r border-border bg-surface px-4 py-5 lg:flex">
+    <div class="mb-8 flex items-center gap-2 text-primary">
+      <Factory size={26} /><span class="font-display text-lg font-extrabold">Planta Yura</span>
+    </div>
+    <nav class="flex flex-col gap-1">
+      {#each nav as n}
+        <a href={n.href} aria-current={activo(n.href) ? 'page' : undefined}
+          class="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition
+            {activo(n.href) ? 'bg-primary text-on-primary' : 'text-muted-ink hover:bg-surface-2 hover:text-ink'}">
+          <n.icon size={20} />{n.label}
+        </a>
+      {/each}
+    </nav>
+  </aside>
+
+  <div class="lg:pl-60">
+    <!-- Top bar -->
+    <header class="sticky top-0 z-20 flex items-center gap-3 border-b border-border bg-surface/90 px-4 py-3 backdrop-blur lg:px-6">
+      <div class="flex items-center gap-2 text-primary lg:hidden">
+        <Factory size={22} /><span class="font-display font-extrabold">Yura</span>
+      </div>
+      <div class="ml-auto flex items-center gap-2">
+        <label class="sr-only" for="fecha">Fecha</label>
+        <input id="fecha" type="date" bind:value={$fechaSeleccionada}
+          class="rounded-full border border-border bg-surface px-4 py-2 text-sm text-ink" />
+        <ThemeToggle />
+      </div>
+    </header>
+
+    <main class="mx-auto max-w-7xl px-4 pb-28 pt-5 lg:px-6 lg:pb-10">{@render children()}</main>
+  </div>
+
+  <!-- Bottom nav (mobile/tablet) -->
+  <nav class="fixed inset-x-0 bottom-0 z-30 flex border-t border-border bg-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden">
+    {#each nav as n}
+      <a href={n.href} aria-current={activo(n.href) ? 'page' : undefined}
+        class="flex flex-1 flex-col items-center gap-1 py-2.5 text-xs font-semibold transition
+          {activo(n.href) ? 'text-primary' : 'text-muted-ink'}">
+        <n.icon size={22} />{n.label}
       </a>
     {/each}
   </nav>
 
-  <div class="p-6">
-    {@render children()}
-  </div>
+  <Toast />
 </div>
