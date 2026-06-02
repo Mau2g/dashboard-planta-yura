@@ -19,3 +19,4 @@ export interface ParteCompleto {
 export interface TipoB { id: number; nombre: string; familia: string; presentacion: string; orden: number; }
 export type PlanSemanal = Record<string, number>;
 export type PlanesEspeciales = Record<string, number>;
+export interface Planes { planMensual: number; planAnual: number; }

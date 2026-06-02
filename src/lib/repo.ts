@@ -1,5 +1,5 @@
 import { getSupabase } from './supabase/client';
-import type { ParteCompleto, TipoB } from './types';
+import type { ParteCompleto, TipoB, PlanSemanal, PlanesEspeciales, Planes } from './types';
 
 export async function getTipos(): Promise<TipoB[]> {
   const { data, error } = await getSupabase().from('tipo_cemento')
@@ -78,4 +78,76 @@ export async function getUltimosDespachosDiarios(desde: string, hasta: string): 
   const m = new Map<string, number>();
   for (const r of (data ?? []) as { fecha: string; tm: number }[]) m.set(r.fecha, (m.get(r.fecha) ?? 0) + Number(r.tm || 0));
   return [...m.entries()].map(([fecha, tm]) => ({ fecha, tm })).sort((a, b) => a.fecha.localeCompare(b.fecha));
+}
+
+// ----- Configuración -----
+export async function getPlanSemanal(): Promise<PlanSemanal> {
+  const { data } = await getSupabase().from('plan_semanal').select('dia,tm');
+  const m: PlanSemanal = {};
+  for (const r of (data ?? []) as { dia: string; tm: number }[]) m[r.dia] = r.tm;
+  return m;
+}
+export async function guardarPlanSemanal(p: PlanSemanal): Promise<void> {
+  const rows = Object.entries(p).map(([dia, tm]) => ({ dia, tm }));
+  const { error } = await getSupabase().from('plan_semanal').upsert(rows, { onConflict: 'dia' });
+  if (error) throw error;
+}
+export async function getPlanesEspeciales(): Promise<PlanesEspeciales> {
+  const { data } = await getSupabase().from('plan_especial').select('fecha,tm');
+  const m: PlanesEspeciales = {};
+  for (const r of (data ?? []) as { fecha: string; tm: number }[]) m[r.fecha] = r.tm;
+  return m;
+}
+export async function guardarPlanEspecial(fecha: string, tm: number): Promise<void> {
+  const { error } = await getSupabase().from('plan_especial').upsert({ fecha, tm }, { onConflict: 'fecha' });
+  if (error) throw error;
+}
+export async function eliminarPlanEspecial(fecha: string): Promise<void> {
+  const { error } = await getSupabase().from('plan_especial').delete().eq('fecha', fecha);
+  if (error) throw error;
+}
+export async function getPlanAnual(anio: number): Promise<Planes> {
+  const { data } = await getSupabase().from('plan_anual').select('plan_mensual,plan_anual').eq('anio', anio).maybeSingle();
+  return { planMensual: data?.plan_mensual ?? 0, planAnual: data?.plan_anual ?? 0 };
+}
+export async function guardarPlanAnual(anio: number, planMensual: number, planAnual: number): Promise<void> {
+  const { error } = await getSupabase().from('plan_anual').upsert({ anio, plan_mensual: planMensual, plan_anual: planAnual }, { onConflict: 'anio' });
+  if (error) throw error;
+}
+export async function crearTipo(nombre: string, familia = 'OTRO', presentacion = 'bolsa42.5'): Promise<void> {
+  const { error } = await getSupabase().from('tipo_cemento').insert({ nombre, familia, presentacion });
+  if (error) throw error;
+}
+export async function actualizarTipo(id: number, campos: { nombre?: string; familia?: string }): Promise<void> {
+  const { error } = await getSupabase().from('tipo_cemento').update(campos).eq('id', id);
+  if (error) throw error;
+}
+export async function eliminarTipo(id: number): Promise<void> {
+  // borrado lógico (preserva integridad con despachos históricos)
+  const { error } = await getSupabase().from('tipo_cemento').update({ activo: false }).eq('id', id);
+  if (error) throw error;
+}
+
+// ----- Helpers de dashboard (paridad index.html) -----
+// Despacho mensual combinado (histórico 2024/25 + vivo 2026+); sin solape.
+export async function despachoMes(anio: number, mes: number): Promise<number> {
+  const { data } = await getSupabase().from('v_despacho_mensual').select('despacho_tm').eq('anio', anio).eq('mes', mes);
+  return (data ?? []).reduce((s: number, r: any) => s + Number(r.despacho_tm || 0), 0);
+}
+
+export interface MaquinaDiaRow { nombre: string; horas_maquina: number; ratio_ecs: number; ratio_ideal: number; averia_critica: string; }
+export async function getMaquinasDia(fecha: string): Promise<MaquinaDiaRow[]> {
+  const sb = getSupabase();
+  const { data: cab } = await sb.from('parte_diario').select('id').eq('fecha', fecha).maybeSingle();
+  if (!cab) return [];
+  const { data } = await sb.from('maquina_registro').select('maquina_id,horas_maquina,ratio_ecs,averia_critica,maquina(nombre,ratio_ideal)').eq('parte_id', cab.id);
+  return (data ?? []).map((m: any) => ({ nombre: m.maquina?.nombre ?? m.maquina_id, horas_maquina: m.horas_maquina, ratio_ecs: m.ratio_ecs, ratio_ideal: m.maquina?.ratio_ideal ?? 0, averia_critica: m.averia_critica }));
+}
+
+export async function getCompuertasDia(fecha: string): Promise<{ numero: number; horas: number; comentario: string }[]> {
+  const sb = getSupabase();
+  const { data: cab } = await sb.from('parte_diario').select('id').eq('fecha', fecha).maybeSingle();
+  if (!cab) return [];
+  const { data } = await sb.from('compuerta_registro').select('numero,horas,comentario').eq('parte_id', cab.id).order('numero');
+  return (data ?? []) as { numero: number; horas: number; comentario: string }[];
 }
