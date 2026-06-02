@@ -8,7 +8,8 @@
   const tabs = [
     { href: '/registro', label: '📝 Registro Diario' },
     { href: '/', label: '📊 Dashboard KPIs' },
-    { href: '/config', label: '⚙️ Configuración' }
+    { href: '/config', label: '⚙️ Configuración' },
+    { href: '/avanzado', label: '🚀 Vista Avanzada' }
   ];
 </script>
 
@@ -23,9 +24,10 @@
 
   <nav class="flex border-b border-slate-200 bg-slate-50">
     {#each tabs as t}
+      {@const activo = t.href === '/avanzado' ? $page.url.pathname.startsWith('/avanzado') : $page.url.pathname === t.href}
       <a href={t.href}
         class="flex-1 px-4 py-4 text-center font-semibold transition
-          {$page.url.pathname === t.href ? 'border-b-[3px] border-yura bg-white text-yura' : 'text-slate-600'}">
+          {activo ? 'border-b-[3px] border-yura bg-white text-yura' : 'text-slate-600'}">
         {t.label}
       </a>
     {/each}
