@@ -42,7 +42,8 @@ export function rendimientoPromedio(maquinas: { ratioECS: number; ratioIdeal: nu
 
 export function planDiario(fechaStr: string, planSemanal: PlanSemanal, planesEspeciales: PlanesEspeciales): number {
   if (planesEspeciales[fechaStr] !== undefined) return planesEspeciales[fechaStr];
-  const fecha = new Date(fechaStr);
+  const [year, month, day] = fechaStr.split('-').map(Number);
+  const fecha = new Date(year, month - 1, day);
   const dia = DIA_POR_INDICE[fecha.getDay()];
   return planSemanal[dia] || 0;
 }

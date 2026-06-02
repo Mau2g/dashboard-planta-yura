@@ -75,8 +75,8 @@ describe('planDiario', () => {
     expect(planDiario('2026-05-21', planSemanal, { '2026-05-21': 12345 })).toBe(12345);
   });
   it('usa plan semanal por día de semana si no hay especial', () => {
-    // 2026-05-21 es miércoles
-    expect(planDiario('2026-05-21', planSemanal, {})).toBe(9333);
+    // 2026-05-21 es jueves
+    expect(planDiario('2026-05-21', planSemanal, {})).toBe(9361);
   });
   it('devuelve 0 si el día no está configurado', () => {
     expect(planDiario('2026-05-21', {}, {})).toBe(0);
