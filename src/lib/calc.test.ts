@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { rendimiento, utilizacion, porcentajeLleno, pesoPromedioKg, variacionPct, cumplimiento, totalTm, totalBolsas, pivotComparativa } from './calc';
+import { rendimiento, utilizacion, porcentajeLleno, pesoPromedioKg, variacionPct, cumplimiento, totalTm, totalBolsas, pivotComparativa, rendimientoPromedio, planDiario } from './calc';
 
 describe('rendimiento', () => {
   it('ratioECS/ratioIdeal en %', () => expect(rendimiento(3171, 4300)).toBeCloseTo(73.744, 2));
@@ -37,4 +37,15 @@ describe('pivotComparativa', () => {
     expect(r[0]).toEqual({ mes: 1, valores: { 2024: 100, 2025: 110 } });
     expect(r[1]).toEqual({ mes: 2, valores: { 2024: 200 } });
   });
+});
+describe('rendimientoPromedio', () => {
+  it('promedia el rendimiento de las máquinas', () =>
+    expect(rendimientoPromedio([{ ratio_ecs: 2400, ratio_ideal: 2400 }, { ratio_ecs: 1800, ratio_ideal: 3600 }])).toBe(75));
+  it('0 si no hay máquinas', () => expect(rendimientoPromedio([])).toBe(0));
+});
+describe('planDiario', () => {
+  const ps = { Lunes: 6675, Martes: 9401, Miércoles: 9333, Jueves: 9361, Viernes: 7985, Sábado: 6720, Domingo: 5810 };
+  it('el plan especial gana', () => expect(planDiario('2026-05-21', ps, { '2026-05-21': 12345 })).toBe(12345));
+  it('usa el plan semanal por día (2026-05-21 es jueves)', () => expect(planDiario('2026-05-21', ps, {})).toBe(9361));
+  it('0 si el día no está configurado', () => expect(planDiario('2026-05-21', {}, {})).toBe(0));
 });
