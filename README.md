@@ -1,42 +1,13 @@
-# sv
+# Dashboard Planta Yura — Vista A (SvelteKit)
 
-Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
+Port fiel del `index.html` original a SvelteKit (Svelte 5 + runes), con backend
+Firebase Firestore intacto (proyecto `lluvias-18b0b`).
 
-## Creating a project
+## Desarrollo
+- `npm run dev` — servidor de desarrollo
+- `npm run build` — build de producción (SPA estática)
+- `npm run preview` — previsualizar el build
+- `npx vitest run` — tests
 
-If you're seeing this, you've probably already done this step. Congrats!
-
-```sh
-# create a new project
-npx sv create my-app
-```
-
-To recreate this project with the same configuration:
-
-```sh
-# recreate this project
-npx sv@0.15.3 create --template minimal --types ts --install npm .
-```
-
-## Developing
-
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
-
-```sh
-npm run dev
-
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
-```
-
-## Building
-
-To create a production version of your app:
-
-```sh
-npm run build
-```
-
-You can preview the production build with `npm run preview`.
-
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+## Rutas
+- `/` Dashboard KPIs · `/registro` Registro Diario · `/config` Configuración

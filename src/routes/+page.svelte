@@ -91,7 +91,7 @@
       <table class="w-full border-collapse">
         <thead><tr class="bg-slate-100 text-left"><th class="p-2">Máquina</th><th class="p-2">Horas</th><th class="p-2">Ratio ECS</th><th class="p-2">Rendimiento</th><th class="p-2">Estado</th></tr></thead>
         <tbody>
-          {#each dia.maquinas || [] as m}
+          {#each dia!.maquinas || [] as m}
             <tr>
               <td class="border-b border-slate-200 p-2">{m.nombre}</td>
               <td class="border-b border-slate-200 p-2">{m.horasMaquina}</td>
@@ -110,7 +110,7 @@
       <table class="w-full border-collapse">
         <thead><tr class="bg-slate-100 text-left"><th class="p-2">Compuerta</th><th class="p-2">Horas trabajadas</th><th class="p-2">Comentario</th></tr></thead>
         <tbody>
-          {#each dia.compuertas || [] as c}
+          {#each dia!.compuertas || [] as c}
             <tr>
               <td class="border-b border-slate-200 p-2">Compuerta {c.numero}</td>
               <td class="border-b border-slate-200 p-2">{c.horas}</td>
