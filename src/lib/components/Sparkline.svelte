@@ -3,7 +3,7 @@
   const puntos = $derived.by(() => {
     if (!data.length) return '';
     const max = Math.max(...data, 1), min = Math.min(...data, 0), span = max - min || 1;
-    return data.map((v, i) => {
+    return data.map((v: number, i: number) => {
       const x = (i / Math.max(data.length - 1, 1)) * width;
       const y = height - ((v - min) / span) * height;
       return `${x.toFixed(1)},${y.toFixed(1)}`;

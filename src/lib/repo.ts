@@ -72,29 +72,6 @@ export async function getPlanVsReal(anio: number): Promise<PlanVsRealRow[]> {
   const { data, error } = await getSupabase().from('v_plan_vs_real').select('*').eq('anio', anio).order('mes');
   if (error) throw error; return (data ?? []) as PlanVsRealRow[];
 }
-// ── Vista A legacy stubs ─────────────────────────────────────────────────────
-export interface PuntoEvolucion { label: string; real: number; plan: number; }
-export interface ConfigCompleta { planSemanal: Record<string, number>; planesEspeciales: Record<string, number>; planes: { planMensual: number; planAnual: number }; }
-import type { DatosDia } from './types';
-
-export async function getConfig(): Promise<ConfigCompleta> {
-  return { planSemanal: {}, planesEspeciales: {}, planes: { planMensual: 0, planAnual: 0 } };
-}
-export async function cargarDia(_fecha: string): Promise<DatosDia | null> { return null; }
-export async function acumuladoMes(_fecha: string): Promise<number> { return 0; }
-export async function acumuladoMesAnterior(_fecha: string): Promise<number | null> { return null; }
-export async function ultimos7Dias(
-  _fecha: string,
-  _planSemanal: Record<string, number>,
-  _planesEspeciales: Record<string, number>,
-  _planDiario: (...args: any[]) => number
-): Promise<PuntoEvolucion[]> { return []; }
-
-export async function guardarDia(_datos: DatosDia): Promise<void> { return; }
-export async function guardarPlanSemanal(_plan: Record<string, number>): Promise<void> { return; }
-export async function guardarPlanesEspeciales(_planes: Record<string, number>): Promise<void> { return; }
-export async function guardarTiposYPlanes(_cfg: any): Promise<void> { return; }
-
 export async function getUltimosDespachosDiarios(desde: string, hasta: string): Promise<{ fecha: string; tm: number }[]> {
   const { data, error } = await getSupabase().from('v_participacion_dia').select('fecha,tm').gte('fecha', desde).lte('fecha', hasta);
   if (error) throw error;

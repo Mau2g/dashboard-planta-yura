@@ -19,12 +19,3 @@ export interface ParteCompleto {
 export interface TipoB { id: number; nombre: string; familia: string; presentacion: string; orden: number; }
 export type PlanSemanal = Record<string, number>;
 export type PlanesEspeciales = Record<string, number>;
-
-// ── Legacy aliases (Vista A / Firebase) ─────────────────────────────────────
-export interface TipoCemento { nombre: string; }
-export interface Maquina { id: string; nombre: string; ratioIdeal: number; }
-export interface MaquinaRegistro { id: string; nombre: string; horasMaquina: number; ratioECS: number; ratioIdeal: number; comentario: string; averiaCritica: 'verde' | 'amarillo' | 'rojo'; }
-export interface Temporal { nombre: string; capacidad: number; inventario: number; }
-export interface Compuerta { numero: number; horas: number; comentario: string; }
-export interface DatosDia { fecha: string; despachos: { tipo: string; tm: number }[]; maquinas: MaquinaRegistro[]; temporales: Temporal[]; compuertas: Compuerta[]; vehiculos: Vehiculos; acumuladoAjuste: number; comentarioGeneral: string; }
-export interface Planes { planMensual: number; planAnual: number; }
