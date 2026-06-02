@@ -1,14 +1,13 @@
 <script lang="ts">
-  let { estado } = $props(); // 'verde' | 'amarillo' | 'rojo'
-  const colores: Record<string, string> = {
-    verde: 'bg-green-500', amarillo: 'bg-yellow-500', rojo: 'bg-red-500'
+  let { estado } = $props<{ estado: string }>();
+  const cfg: Record<string, { c: string; t: string }> = {
+    verde: { c: 'bg-success', t: 'Operativo' },
+    amarillo: { c: 'bg-warning', t: 'En reparación' },
+    rojo: { c: 'bg-danger', t: 'Avería' }
   };
-  const textos: Record<string, string> = {
-    verde: 'Operativo', amarillo: 'En reparación', rojo: 'Avería reportada'
-  };
+  const s = $derived(cfg[estado] ?? cfg.verde);
 </script>
 
-<span class="inline-flex items-center gap-2">
-  <span class="inline-block h-5 w-5 rounded-full {colores[estado] ?? 'bg-green-500'}"></span>
-  {textos[estado] ?? 'Operativo'}
+<span class="inline-flex items-center gap-2 text-sm">
+  <span class="h-2.5 w-2.5 rounded-full {s.c}"></span>{s.t}
 </span>

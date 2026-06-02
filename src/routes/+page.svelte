@@ -4,7 +4,8 @@
   import SectionCard from '$lib/components/SectionCard.svelte';
   import KPICard from '$lib/components/KPICard.svelte';
   import StatusBadge from '$lib/components/StatusBadge.svelte';
-  import ChartCanvas from '$lib/components/ChartCanvas.svelte';
+  import ChartCard from '$lib/components/ChartCard.svelte';
+  import type { ChartConfiguration } from 'chart.js';
   import Toast from '$lib/components/Toast.svelte';
   import {
     totalDia, participaciones, rendimiento, rendimientoPromedio, planDiario
@@ -83,7 +84,18 @@
   </SectionCard>
 
   <SectionCard title="📈 Evolución últimos 7 días (despacho total) vs Plan diario">
-    <ChartCanvas {puntos} />
+    <ChartCard config={{
+      type: 'bar',
+      data: {
+        labels: puntos.map((p) => p.label),
+        datasets: [
+          { label: 'Despacho real (TM)', data: puntos.map((p) => p.real), backgroundColor: 'var(--c-primary)' },
+          { label: 'Plan diario (TM)', data: puntos.map((p) => p.plan), type: 'line',
+            borderColor: 'var(--c-secondary)', borderDash: [5, 5], fill: false, tension: 0.1 }
+        ]
+      },
+      options: { responsive: true, maintainAspectRatio: false }
+    } as ChartConfiguration} />
   </SectionCard>
 
   <SectionCard title="🔬 Resumen máquinas (rendimiento y estado)">
