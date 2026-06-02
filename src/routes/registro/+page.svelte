@@ -6,7 +6,7 @@
   import { toast } from '$lib/components/toastStore';
   import { MAQUINAS, TEMPORALES } from '$lib/constants';
   import { rendimiento, utilizacion, porcentajeLleno, pesoPromedioKg, totalTm, totalBolsas } from '$lib/calc';
-  import { getTipos, guardarParte, cargarParte } from '$lib/repo';
+  import { getTipos, guardarParte, cargarParte, despachoMes } from '$lib/repo';
   import { fechaSeleccionada } from '$lib/stores';
   import { Save, RotateCcw } from 'lucide-svelte';
 
@@ -21,19 +21,24 @@
   let veh = $state({ llamado: 0, proceso: 0, playa: 0 });
   let acumuladoAjuste = $state(0);
   let comentario = $state('');
+  let acumMes = $state(0);
 
   const tm = $derived(totalTm(lineas));
   const bolsas = $derived(totalBolsas(lineas));
   const ventaTotal = $derived((Number(venta.nacional_tm) || 0) + (Number(venta.export_tm) || 0));
   const totalVeh = $derived((Number(veh.llamado) || 0) + (Number(veh.proceso) || 0) + (Number(veh.playa) || 0));
+  const acumuladoConAjuste = $derived(acumMes + (Number(acumuladoAjuste) || 0));
 
   let tipos: { id: number; nombre: string; familia: string }[] = [];
   onMount(async () => { tipos = await getTipos(); await recargar(); cargando = false; });
   $effect(() => { $fechaSeleccionada; if (!cargando) recargar(); });
 
   async function recargar() {
+    const fecha = get(fechaSeleccionada);
+    const [y, mo] = fecha.split('-').map(Number);
+    acumMes = await despachoMes(y, mo);
     lineas = tipos.map((t) => ({ tipo_id: t.id, nombre: t.nombre, familia: t.familia, bolsas: 0, tm: 0 }));
-    const p = await cargarParte(get(fechaSeleccionada));
+    const p = await cargarParte(fecha);
     if (!p) {
       venta = { nacional_tm: 0, export_tm: 0, a_construir_tm: 0 };
       maquinas = MAQUINAS.map((m) => ({ maquina_id: m.id, nombre: m.nombre, ratio_ideal: m.ratio_ideal, horas_maquina: 0, ratio_ecs: 0, operativos: 0, comentario: '', averia_critica: 'verde' }));
@@ -172,11 +177,17 @@
       <label class="text-sm">Playa<input type="number" inputmode="numeric" class="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 font-data" bind:value={veh.playa} /></label>
       <div class="flex items-end font-bold">Total: <span class="ml-1 font-data">{totalVeh}</span></div>
     </div>
-    <label class="mt-4 block text-sm">Ajuste acumulado<input type="number" inputmode="numeric" class="mt-1 w-full max-w-xs rounded-lg border border-border bg-surface px-3 py-2 font-data" bind:value={acumuladoAjuste} /></label>
+    <div class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div>
+        <span class="block text-sm">Acumulado del mes (auto + ajuste)</span>
+        <div class="mt-1 rounded-lg border border-border bg-surface-2 px-3 py-2 font-data font-bold">{acumuladoConAjuste.toFixed(2)} TM</div>
+      </div>
+      <label class="block text-sm">Ajuste manual del acumulado<input type="number" inputmode="numeric" class="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 font-data" bind:value={acumuladoAjuste} /></label>
+    </div>
     <label class="mt-4 block text-sm">Comentario general<textarea rows="2" class="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2" bind:value={comentario}></textarea></label>
   </SectionCard>
 
-  <!-- Mobile sticky actions -->
+  <!-- Acciones móviles (sticky) -->
   <div class="sticky bottom-24 z-10 mt-4 flex gap-2 sm:hidden">
     <button onclick={recargar} class="inline-flex flex-1 items-center justify-center gap-2 rounded-full bg-surface-2 px-4 py-3 text-sm font-bold text-ink shadow"><RotateCcw size={16} /> Recargar</button>
     <button onclick={guardar} disabled={guardando} class="inline-flex flex-1 items-center justify-center gap-2 rounded-full bg-primary px-4 py-3 text-sm font-bold text-on-primary shadow disabled:opacity-50"><Save size={16} /> {guardando ? 'Guardando…' : 'Guardar'}</button>
