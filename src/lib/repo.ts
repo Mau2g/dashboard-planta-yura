@@ -1,125 +1,81 @@
-import {
-  collection, doc, getDoc, getDocs, setDoc, query, where, serverTimestamp
-} from 'firebase/firestore';
-import { getDb } from './firebase';
-import { TIPOS_DEFECTO } from './constants';
-import { totalDia } from './calc';
-import type {
-  DatosDia, TipoCemento, Planes, PlanSemanal, PlanesEspeciales
-} from './types';
+import { getSupabase } from './supabase/client';
+import type { ParteCompleto, TipoB } from './types';
 
-const DIARIOS = 'planta_datos_diarios';
-const CONFIG = 'planta_config';
-
-export interface ConfigCompleta {
-  tiposCemento: TipoCemento[];
-  planes: Planes;
-  planSemanal: PlanSemanal;
-  planesEspeciales: PlanesEspeciales;
+export async function getTipos(): Promise<TipoB[]> {
+  const { data, error } = await getSupabase().from('tipo_cemento')
+    .select('id,nombre,familia,presentacion,orden').eq('activo', true).order('orden');
+  if (error) throw error;
+  return (data ?? []) as TipoB[];
 }
 
-export async function getConfig(): Promise<ConfigCompleta> {
-  const db = getDb();
-  const tiposSnap = await getDoc(doc(db, CONFIG, 'tiposCemento'));
-  const tiposCemento: TipoCemento[] = tiposSnap.exists()
-    ? (tiposSnap.data().lista as TipoCemento[])
-    : TIPOS_DEFECTO;
-
-  const planesSnap = await getDoc(doc(db, CONFIG, 'planes'));
-  const planes: Planes = planesSnap.exists()
-    ? (planesSnap.data() as Planes)
-    : { planMensual: 0, planAnual: 0 };
-
-  const planSemanalSnap = await getDoc(doc(db, CONFIG, 'planSemanal'));
-  const planSemanal: PlanSemanal = planSemanalSnap.exists()
-    ? (planSemanalSnap.data() as PlanSemanal)
-    : { Lunes: 0, Martes: 0, Miércoles: 0, Jueves: 0, Viernes: 0, Sábado: 0, Domingo: 0 };
-
-  const planesEspSnap = await getDoc(doc(db, CONFIG, 'planesEspeciales'));
-  const planesEspeciales: PlanesEspeciales = planesEspSnap.exists()
-    ? (planesEspSnap.data() as PlanesEspeciales)
-    : {};
-
-  return { tiposCemento, planes, planSemanal, planesEspeciales };
-}
-
-export async function guardarTiposYPlanes(tiposCemento: TipoCemento[], planes: Planes): Promise<void> {
-  const db = getDb();
-  await setDoc(doc(db, CONFIG, 'tiposCemento'), { lista: tiposCemento });
-  await setDoc(doc(db, CONFIG, 'planes'), planes);
-}
-
-export async function guardarPlanSemanal(planSemanal: PlanSemanal): Promise<void> {
-  await setDoc(doc(getDb(), CONFIG, 'planSemanal'), planSemanal);
-}
-
-export async function guardarPlanesEspeciales(planesEspeciales: PlanesEspeciales): Promise<void> {
-  await setDoc(doc(getDb(), CONFIG, 'planesEspeciales'), planesEspeciales);
-}
-
-export async function guardarDia(datos: DatosDia): Promise<void> {
-  const db = getDb();
-  await setDoc(
-    doc(db, DIARIOS, datos.fecha),
-    { ...datos, timestamp: serverTimestamp() },
-    { merge: true }
-  );
-}
-
-export async function cargarDia(fecha: string): Promise<DatosDia | null> {
-  const snap = await getDoc(doc(getDb(), DIARIOS, fecha));
-  return snap.exists() ? (snap.data() as DatosDia) : null;
-}
-
-function rangoMes(fechaStr: string): { start: string; end: string } {
-  const [year, month] = fechaStr.split('-').map(Number);
-  const start = `${year}-${String(month).padStart(2, '0')}-01`;
-  const end = new Date(year, month, 0).toISOString().slice(0, 10);
-  return { start, end };
-}
-
-async function sumarDespachosRango(start: string, end: string): Promise<number> {
-  const db = getDb();
-  const q = query(collection(db, DIARIOS), where('fecha', '>=', start), where('fecha', '<=', end));
-  const snap = await getDocs(q);
-  let total = 0;
-  snap.forEach((d) => { total += totalDia((d.data().despachos as DatosDia['despachos']) || []); });
-  return total;
-}
-
-export async function acumuladoMes(fechaStr: string): Promise<number> {
-  const { start, end } = rangoMes(fechaStr);
-  return sumarDespachosRango(start, end);
-}
-
-export async function acumuladoMesAnterior(fechaStr: string): Promise<number> {
-  const fecha = new Date(fechaStr);
-  fecha.setMonth(fecha.getMonth() - 1);
-  const start = `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}-01`;
-  const end = new Date(fecha.getFullYear(), fecha.getMonth() + 1, 0).toISOString().slice(0, 10);
-  return sumarDespachosRango(start, end);
-}
-
-export interface PuntoEvolucion { label: string; real: number; plan: number; }
-
-export async function ultimos7Dias(
-  fechaStr: string,
-  planSemanal: PlanSemanal,
-  planesEspeciales: PlanesEspeciales,
-  planDiarioFn: (f: string, ps: PlanSemanal, pe: PlanesEspeciales) => number
-): Promise<PuntoEvolucion[]> {
-  const fecha = new Date(fechaStr);
-  const dias: string[] = [];
-  for (let i = 6; i >= 0; i--) {
-    const d = new Date(fecha);
-    d.setDate(fecha.getDate() - i);
-    dias.push(d.toISOString().slice(0, 10));
+export async function guardarParte(p: ParteCompleto): Promise<void> {
+  const sb = getSupabase();
+  const { data: parte, error } = await sb.from('parte_diario').upsert({
+    fecha: p.fecha, veh_llamado: p.veh_llamado, veh_proceso: p.veh_proceso, veh_playa: p.veh_playa,
+    acumulado_ajuste: p.acumulado_ajuste, comentario: p.comentario
+  }, { onConflict: 'fecha' }).select('id').single();
+  if (error) throw error;
+  const id = parte.id as number;
+  await sb.from('despacho').delete().eq('parte_id', id);
+  if (p.despachos.length) {
+    const { error: e } = await sb.from('despacho').insert(p.despachos.map((d) => ({ parte_id: id, tipo_id: d.tipo_id, bolsas: d.bolsas, tm: d.tm })));
+    if (e) throw e;
   }
-  const puntos: PuntoEvolucion[] = [];
-  for (const f of dias) {
-    const dia = await cargarDia(f);
-    const real = dia ? totalDia(dia.despachos || []) : 0;
-    puntos.push({ label: f.slice(5), real, plan: planDiarioFn(f, planSemanal, planesEspeciales) });
-  }
-  return puntos;
+  await sb.from('venta_diaria').upsert({ parte_id: id, ...p.venta }, { onConflict: 'parte_id' });
+  await sb.from('maquina_registro').delete().eq('parte_id', id);
+  if (p.maquinas.length) await sb.from('maquina_registro').insert(p.maquinas.map((m) => ({ parte_id: id, ...m })));
+  await sb.from('temporal_registro').delete().eq('parte_id', id);
+  if (p.temporales.length) await sb.from('temporal_registro').insert(p.temporales.map((t) => ({ parte_id: id, ...t })));
+  await sb.from('compuerta_registro').delete().eq('parte_id', id);
+  if (p.compuertas.length) await sb.from('compuerta_registro').insert(p.compuertas.map((c) => ({ parte_id: id, ...c })));
+}
+
+export async function cargarParte(fecha: string): Promise<ParteCompleto | null> {
+  const sb = getSupabase();
+  const { data: cab } = await sb.from('parte_diario').select('*').eq('fecha', fecha).maybeSingle();
+  if (!cab) return null;
+  const id = cab.id as number;
+  const [desp, venta, maq, temp, comp] = await Promise.all([
+    sb.from('despacho').select('tipo_id,bolsas,tm,tipo_cemento(nombre,familia)').eq('parte_id', id),
+    sb.from('venta_diaria').select('*').eq('parte_id', id).maybeSingle(),
+    sb.from('maquina_registro').select('*').eq('parte_id', id),
+    sb.from('temporal_registro').select('*').eq('parte_id', id),
+    sb.from('compuerta_registro').select('*').eq('parte_id', id)
+  ]);
+  return {
+    fecha,
+    veh_llamado: cab.veh_llamado, veh_proceso: cab.veh_proceso, veh_playa: cab.veh_playa,
+    acumulado_ajuste: cab.acumulado_ajuste, comentario: cab.comentario,
+    despachos: (desp.data ?? []).map((d: any) => ({ tipo_id: d.tipo_id, nombre: d.tipo_cemento?.nombre ?? '', familia: d.tipo_cemento?.familia ?? '', bolsas: d.bolsas, tm: d.tm })),
+    venta: { nacional_tm: venta.data?.nacional_tm ?? 0, export_tm: venta.data?.export_tm ?? 0, a_construir_tm: venta.data?.a_construir_tm ?? 0 },
+    maquinas: (maq.data ?? []) as any, temporales: (temp.data ?? []) as any, compuertas: (comp.data ?? []) as any
+  };
+}
+
+export interface ParticipacionRow { tipo: string; familia: string; bolsas: number; tm: number; pct: number; }
+export async function getParticipacionDia(fecha: string): Promise<ParticipacionRow[]> {
+  const { data, error } = await getSupabase().from('v_participacion_dia').select('*').eq('fecha', fecha);
+  if (error) throw error; return (data ?? []) as ParticipacionRow[];
+}
+export interface FamiliaRow { familia: string; bolsas: number; tm: number; }
+export async function getDespachoPorFamilia(fecha: string): Promise<FamiliaRow[]> {
+  const { data, error } = await getSupabase().from('v_despacho_por_familia').select('familia,bolsas,tm').eq('fecha', fecha);
+  if (error) throw error; return (data ?? []) as FamiliaRow[];
+}
+export interface ComparativaRow { anio: number; mes: number; despacho_tm: number; }
+export async function getComparativaAnual(): Promise<ComparativaRow[]> {
+  const { data, error } = await getSupabase().from('v_comparativa_anual').select('*');
+  if (error) throw error; return (data ?? []) as ComparativaRow[];
+}
+export interface PlanVsRealRow { anio: number; mes: number; plan_tm: number; real_tm: number; cumplimiento_pct: number; }
+export async function getPlanVsReal(anio: number): Promise<PlanVsRealRow[]> {
+  const { data, error } = await getSupabase().from('v_plan_vs_real').select('*').eq('anio', anio).order('mes');
+  if (error) throw error; return (data ?? []) as PlanVsRealRow[];
+}
+export async function getUltimosDespachosDiarios(desde: string, hasta: string): Promise<{ fecha: string; tm: number }[]> {
+  const { data, error } = await getSupabase().from('v_participacion_dia').select('fecha,tm').gte('fecha', desde).lte('fecha', hasta);
+  if (error) throw error;
+  const m = new Map<string, number>();
+  for (const r of (data ?? []) as { fecha: string; tm: number }[]) m.set(r.fecha, (m.get(r.fecha) ?? 0) + Number(r.tm || 0));
+  return [...m.entries()].map(([fecha, tm]) => ({ fecha, tm })).sort((a, b) => a.fecha.localeCompare(b.fecha));
 }
