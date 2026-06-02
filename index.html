@@ -1,0 +1,957 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>Gestión Integral Planta Yura - Datos Fijos</title>
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Segoe UI', Roboto, sans-serif;
+            background: #f0f2f5;
+            padding: 20px;
+            color: #1e293b;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 28px;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        header {
+            background: linear-gradient(135deg, #034694, #022d66);
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+        header h1 { font-size: 1.8rem; display: flex; align-items: center; justify-content: center; gap: 10px; }
+        .date-bar {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-top: 12px;
+            flex-wrap: wrap;
+        }
+        .date-bar input, .date-bar button {
+            padding: 8px 16px;
+            border-radius: 40px;
+            border: none;
+            font-size: 0.9rem;
+        }
+        .date-bar input { background: rgba(255,255,255,0.2); color: white; border: 1px solid white; }
+        .date-bar button { background: white; color: #034694; font-weight: bold; cursor: pointer; }
+        .nav-tabs {
+            display: flex;
+            background: #f8fafc;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        .tab-btn {
+            flex: 1;
+            padding: 16px;
+            background: none;
+            border: none;
+            font-weight: 600;
+            cursor: pointer;
+            transition: 0.2s;
+            color: #475569;
+            font-size: 1rem;
+        }
+        .tab-btn.active {
+            color: #034694;
+            border-bottom: 3px solid #034694;
+            background: white;
+        }
+        .tab-content { padding: 24px; display: none; }
+        .tab-content.active { display: block; }
+        .form-section {
+            background: #ffffff;
+            border-radius: 20px;
+            margin-bottom: 30px;
+            border: 1px solid #e2e8f0;
+            overflow: hidden;
+        }
+        .section-header {
+            background: #f1f5f9;
+            padding: 14px 20px;
+            font-weight: 700;
+            color: #034694;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        .section-body { padding: 20px; }
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 30px;
+        }
+        .kpi-card {
+            background: #f8fafc;
+            border-radius: 20px;
+            padding: 16px;
+            text-align: center;
+            border-left: 4px solid #034694;
+        }
+        .kpi-value { font-size: 1.8rem; font-weight: 800; color: #034694; }
+        .kpi-label { font-size: 0.8rem; color: #475569; }
+        .table-responsive { overflow-x: auto; margin-top: 20px; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 10px 8px; text-align: left; border-bottom: 1px solid #e2e8f0; }
+        th { background: #f1f5f9; }
+        input, textarea, select {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #cbd5e1;
+            border-radius: 12px;
+            font-size: 0.9rem;
+        }
+        .btn {
+            padding: 12px 24px;
+            border-radius: 40px;
+            border: none;
+            font-weight: bold;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        .btn-primary { background: #034694; color: white; }
+        .btn-primary:hover { background: #022d66; }
+        .btn-secondary { background: #e2e8f0; color: #1e293b; }
+        .btn-success { background: #10b981; color: white; }
+        .btn-danger { background: #ef4444; color: white; }
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            right: 20px;
+            background: #034694;
+            color: white;
+            padding: 12px;
+            border-radius: 40px;
+            text-align: center;
+            z-index: 1000;
+            animation: fadein 0.3s;
+        }
+        @keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
+        .status-badge {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            margin-right: 8px;
+            vertical-align: middle;
+        }
+        .status-red { background-color: #ef4444; }
+        .status-yellow { background-color: #eab308; }
+        .status-green { background-color: #22c55e; }
+        .highlight { background-color: #fff3cd; font-weight: bold; color: #b85c00; }
+        .flex-row { display: flex; gap: 20px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 15px; }
+        .flex-row > div { flex: 1; }
+        .info-line { font-size: 0.9rem; color: #475569; margin-top: 8px; }
+        @media (max-width: 768px) {
+            body { padding: 10px; }
+            .tab-btn { font-size: 0.8rem; padding: 12px; }
+            .kpi-value { font-size: 1.4rem; }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <header>
+        <h1><i class="fas fa-industry"></i> Gestión Integral Planta Yura</h1>
+        <div class="date-bar">
+            <input type="date" id="fechaDashboard" value="">
+            <button id="cargarDashboardBtn"><i class="fas fa-chart-line"></i> Ver KPIs</button>
+        </div>
+    </header>
+
+    <div class="nav-tabs">
+        <button class="tab-btn" data-tab="registro">📝 Registro Diario</button>
+        <button class="tab-btn active" data-tab="kpis">📊 Dashboard KPIs</button>
+        <button class="tab-btn" data-tab="config">⚙️ Configuración</button>
+    </div>
+
+    <!-- ======================= PESTAÑA REGISTRO DIARIO ======================= -->
+    <div id="registro" class="tab-content">
+        <!-- Despachos -->
+        <div class="form-section">
+            <div class="section-header"><i class="fas fa-truck"></i> Despacho por tipo de cemento (TM)</div>
+            <div class="section-body">
+                <div class="table-responsive">
+                    <table id="tablaDespachos">
+                        <thead><tr><th>Tipo de cemento</th><th>TM despachadas</th><th></th></tr></thead>
+                        <tbody id="despachosBody"></tbody>
+                    </table>
+                </div>
+                <button id="agregarTipoDespacho" class="btn btn-secondary" style="margin-top: 10px;"><i class="fas fa-plus"></i> Agregar tipo</button>
+            </div>
+        </div>
+
+        <!-- Temporales -->
+        <div class="form-section">
+            <div class="section-header"><i class="fas fa-warehouse"></i> Inventario en Temporales (almacenes de producto terminado)</div>
+            <div class="section-body" id="temporalesContainer"></div>
+        </div>
+
+        <!-- Máquinas embolsadoras -->
+        <div class="form-section">
+            <div class="section-header"><i class="fas fa-cogs"></i> Máquinas embolsadoras (H1-H5, Ventomatic)</div>
+            <div class="section-body">
+                <div class="table-responsive">
+                    <table id="tablaMaquinas">
+                        <thead><tr><th>Máquina</th><th>Horas máquina</th><th>Ratio ECS</th><th>Ratio Ideal</th><th>Rendimiento (%)</th><th>Utilización (%)</th><th>Comentario técnico</th><th>Estado crítico</th></tr></thead>
+                        <tbody id="maquinasBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Silo 8 Compuertas -->
+        <div class="form-section">
+            <div class="section-header"><i class="fas fa-archive"></i> Silo 8 - Compuertas</div>
+            <div class="section-body" id="compuertasContainer"></div>
+        </div>
+
+        <!-- Vehículos en planta -->
+        <div class="form-section">
+            <div class="section-header"><i class="fas fa-car"></i> Vehículos en planta</div>
+            <div class="section-body">
+                <div class="flex-row">
+                    <div><label>En llamado:</label> <input type="number" id="vehiculosLlamado" value="0" step="1"></div>
+                    <div><label>En proceso:</label> <input type="number" id="vehiculosProceso" value="0" step="1"></div>
+                    <div><label>En playa:</label> <input type="number" id="vehiculosPlaya" value="0" step="1"></div>
+                    <div><label>Total:</label> <span id="totalVehiculos" style="font-weight: bold;">0</span></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Acumulado mes y comentario general -->
+        <div class="form-section">
+            <div class="section-header"><i class="fas fa-chart-line"></i> Acumulado del mes y observaciones</div>
+            <div class="section-body">
+                <div class="flex-row">
+                    <div><label>Acumulado del mes (TM) - calculado automáticamente:</label> <input type="number" id="acumuladoMesReg" readonly style="background:#f1f5f9;"></div>
+                    <div><label>Ajuste manual (si es necesario):</label> <input type="number" id="ajusteAcumulado" value="0" step="1"></div>
+                </div>
+                <div><label>Comentario técnico general del día:</label> <textarea id="comentarioGeneral" rows="2" placeholder="Observaciones, incidencias, etc." style="width:100%"></textarea></div>
+            </div>
+        </div>
+
+        <div style="display: flex; gap: 15px; justify-content: flex-end; margin-top: 20px;">
+            <button id="guardarBtn" class="btn btn-primary"><i class="fas fa-save"></i> Guardar datos del día</button>
+            <button id="cargarBtn" class="btn btn-secondary"><i class="fas fa-download"></i> Cargar datos de fecha</button>
+        </div>
+        <div id="mensajeRegistro"></div>
+    </div>
+
+    <!-- ======================= PESTAÑA DASHBOARD ======================= -->
+    <div id="kpis" class="tab-content active">
+        <div class="kpi-grid" id="kpiCards"></div>
+        <div class="form-section">
+            <div class="section-header"><i class="fas fa-chart-simple"></i> Despachos del día (TM) – alta demanda destacada (>10%)</div>
+            <div class="section-body">
+                <div class="table-responsive">
+                    <table id="tablaDespachoKpi">
+                        <thead><tr><th>Tipo de cemento</th><th>TM</th><th>% participación</th></tr></thead>
+                        <tbody id="despachoKpiBody"></tbody>
+                    </table>
+                </div>
+                <div style="margin-top: 16px;"><strong>Acumulado del mes:</strong> <span id="acumuladoMesKpi">0</span> TM</div>
+            </div>
+        </div>
+        <div class="form-section">
+            <div class="section-header"><i class="fas fa-chart-line"></i> Evolución últimos 7 días (despacho total) vs Plan diario</div>
+            <div class="section-body">
+                <canvas id="evolucionChart" style="max-height: 300px;"></canvas>
+            </div>
+        </div>
+        <div class="form-section">
+            <div class="section-header"><i class="fas fa-microchip"></i> Resumen máquinas (rendimiento y estado)</div>
+            <div class="section-body" id="resumenMaquinas"></div>
+        </div>
+        <div class="form-section">
+            <div class="section-header"><i class="fas fa-archive"></i> Resumen Silo 8 - Horas por compuerta</div>
+            <div class="section-body" id="resumenSilo8"></div>
+        </div>
+    </div>
+
+    <!-- ======================= PESTAÑA CONFIGURACIÓN ======================= -->
+    <div id="config" class="tab-content">
+        <!-- Planes diarios por día de semana -->
+        <div class="form-section">
+            <div class="section-header"><i class="fas fa-calendar-week"></i> Plan diario por día de semana (TM)</div>
+            <div class="section-body">
+                <div id="planSemanalContainer" class="flex-row" style="flex-wrap: wrap;"></div>
+                <button id="guardarPlanSemanalBtn" class="btn btn-primary" style="margin-top: 10px;"><i class="fas fa-save"></i> Guardar plan semanal</button>
+            </div>
+        </div>
+        <!-- Plan especial para fechas concretas -->
+        <div class="form-section">
+            <div class="section-header"><i class="fas fa-calendar-day"></i> Plan especial para fecha específica</div>
+            <div class="section-body">
+                <div class="flex-row">
+                    <div><label>Fecha:</label> <input type="date" id="fechaPlanEspecial"></div>
+                    <div><label>Plan especial (TM):</label> <input type="number" id="planEspecialValor" step="1"></div>
+                    <div><button id="agregarPlanEspecialBtn" class="btn-secondary">Agregar/Actualizar</button></div>
+                </div>
+                <div id="listaPlanesEspeciales" style="margin-top: 15px;"></div>
+                <button id="guardarPlanesEspecialesBtn" class="btn-primary" style="margin-top: 10px;">Guardar todos los planes especiales</button>
+            </div>
+        </div>
+        <!-- Planes mensual/anual -->
+        <div class="form-section">
+            <div class="section-header"><i class="fas fa-calendar-alt"></i> Planes mensual y anual</div>
+            <div class="section-body">
+                <div class="flex-row">
+                    <div><label>Plan mensual (TM) para el mes actual:</label> <input type="number" id="planMensual" step="1"></div>
+                    <div><label>Plan anual (TM):</label> <input type="number" id="planAnual" step="1"></div>
+                </div>
+                <button id="guardarPlanesBtn" class="btn btn-primary"><i class="fas fa-save"></i> Guardar planes</button>
+            </div>
+        </div>
+
+        <!-- Tipos de cemento -->
+        <div class="form-section">
+            <div class="section-header"><i class="fas fa-list"></i> Tipos de cemento (lista maestra)</div>
+            <div class="section-body">
+                <div id="tiposCementoList"></div>
+                <button id="agregarTipoConfig" class="btn btn-secondary" style="margin-top: 10px;"><i class="fas fa-plus"></i> Agregar nuevo tipo</button>
+                <button id="guardarTiposBtn" class="btn btn-primary" style="margin-top: 10px;"><i class="fas fa-save"></i> Guardar lista de tipos</button>
+            </div>
+        </div>
+
+        <!-- Datos fijos informativos -->
+        <div class="form-section">
+            <div class="section-header"><i class="fas fa-info-circle"></i> Datos fijos del sistema</div>
+            <div class="section-body">
+                <p><strong>Capacidades de temporales (fijas):</strong></p>
+                <ul id="listaTemporalesFijos"></ul>
+                <p><strong>Ratios ideales de máquinas (fijos):</strong></p>
+                <ul id="listaMaquinasFijas"></ul>
+                <p class="info-line">Estos valores están predefinidos y no se pueden modificar desde la interfaz.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+<script>
+    // Config Firebase
+    const firebaseConfig = {
+        apiKey: "AIzaSyC_fR_JLDFh8wAoNo6hMcyhg_N8Ra2_oaI",
+        authDomain: "lluvias-18b0b.firebaseapp.com",
+        projectId: "lluvias-18b0b",
+        storageBucket: "lluvias-18b0b.firebasestorage.app",
+        messagingSenderId: "925381909831",
+        appId: "1:925381909831:web:75e917c153c2f0db9f8062"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+    const datosDiariosCol = db.collection('planta_datos_diarios');
+    const configCol = db.collection('planta_config');
+
+    // Variables globales - DATOS FIJOS
+    let tiposCemento = [];
+    const maquinas = [
+        { id: 'H1', nombre: 'Haver 1', ratioIdeal: 2400 },
+        { id: 'H2', nombre: 'Haver 2', ratioIdeal: 3600 },
+        { id: 'H3', nombre: 'Haver 3', ratioIdeal: 3900 },
+        { id: 'H4', nombre: 'Haver 4', ratioIdeal: 3900 },
+        { id: 'H5', nombre: 'Haver 5', ratioIdeal: 3900 },
+        { id: 'V', nombre: 'Ventomatic', ratioIdeal: 4300 }
+    ];
+    const temporales = [
+        { nombre: 'Temporal 1', capacidad: 2142, inventario: 0 },
+        { nombre: 'Temporal 2', capacidad: 1890, inventario: 0 },
+        { nombre: 'Misti', capacidad: 3006, inventario: 0 }
+    ];
+    let compuertas = [];
+    for (let i = 1; i <= 8; i++) compuertas.push({ numero: i, horas: 0, comentario: '' });
+    let planes = { planMensual: 0, planAnual: 0 };
+    let planSemanal = { Lunes: 0, Martes: 0, Miércoles: 0, Jueves: 0, Viernes: 0, Sábado: 0, Domingo: 0 };
+    let planesEspeciales = {};
+
+    let chartInstance = null;
+
+    // Elementos DOM
+    const despachosBody = document.getElementById('despachosBody');
+    const maquinasBody = document.getElementById('maquinasBody');
+    const temporalesContainer = document.getElementById('temporalesContainer');
+    const compuertasContainer = document.getElementById('compuertasContainer');
+    const vehiculosLlamado = document.getElementById('vehiculosLlamado');
+    const vehiculosProceso = document.getElementById('vehiculosProceso');
+    const vehiculosPlaya = document.getElementById('vehiculosPlaya');
+    const totalVehiculosSpan = document.getElementById('totalVehiculos');
+    const acumuladoMesReg = document.getElementById('acumuladoMesReg');
+    const ajusteAcumulado = document.getElementById('ajusteAcumulado');
+    const comentarioGeneral = document.getElementById('comentarioGeneral');
+
+    function toast(msg, isError = false) {
+        const t = document.createElement('div');
+        t.className = 'toast';
+        t.innerText = msg;
+        t.style.background = isError ? '#b91c1c' : '#034694';
+        document.body.appendChild(t);
+        setTimeout(() => t.remove(), 3000);
+    }
+
+    // ======================= CONFIGURACIÓN =======================
+    async function loadConfig() {
+        try {
+            const tiposSnap = await configCol.doc('tiposCemento').get();
+            if (tiposSnap.exists) {
+                tiposCemento = tiposSnap.data().lista;
+            } else {
+                tiposCemento = [
+                    "CEM. FRONTERA GU X 42.5 KG",
+                    "CEMENTO FRONTERA IP x 42.5 KG",
+                    "CEMENTO HS+R X 42.5 KG RUMI",
+                    "CEMENTO PORTLAND TIPO I X 42.5 KG YURA",
+                    "CEMENTO YURA ANTISALITRE (MS) X 42.5 KG",
+                    "CEMENTO YURA MAX (HS) X 42.5KG",
+                    "CEMENTO YURA PRO (HE) 42.5KG",
+                    "CEMENTO YURA PRO EXPORT BRASIL x 42.5 kg",
+                    "CEMENTO BLANCO X 25 KG YURA NACIONAL",
+                    "CEMENTO YURA PRO (HE) BBx1.5TM INC.ENV",
+                    "CEM ALT REST IN HE BB1.5TM YURA ENV CHIL",
+                    "CEM. PORT. PUZ. IP BBx1.5TM INC.ENV YURA",
+                    "CEM.YURA ANTISALITRE MS BBx1.5TM INC.ENV",
+                    "CEMENTO YURA MAX BBx1.5TM INC.ENV",
+                    "CEM. PORT. I BBx1.5TM INC.ENV YURA",
+                    "CEMENTO YURA PRO (HE) GRANEL EN BOMBONA",
+                    "CEMENTO YURA IP A GRANEL EN BOMBONA",
+                    "CEMENTO YURA MAX GRANEL BOMBONA"
+                ].map(n => ({ nombre: n }));
+            }
+            renderTablaDespachos();
+            renderTablaMaquinas();
+            renderTemporales();
+            renderCompuertas();
+
+            // Cargar planes desde Firestore
+            const planesSnap = await configCol.doc('planes').get();
+            if (planesSnap.exists) {
+                planes = planesSnap.data();
+                document.getElementById('planMensual').value = planes.planMensual || 0;
+                document.getElementById('planAnual').value = planes.planAnual || 0;
+            }
+
+            const planSemanalSnap = await configCol.doc('planSemanal').get();
+            if (planSemanalSnap.exists) {
+                planSemanal = planSemanalSnap.data();
+            }
+            renderPlanSemanal();
+
+            const planesEspSnap = await configCol.doc('planesEspeciales').get();
+            if (planesEspSnap.exists) {
+                planesEspeciales = planesEspSnap.data();
+            }
+            renderPlanesEspeciales();
+
+            renderConfigTipos();
+            renderDatosFijos();
+        } catch(e) { console.error(e); }
+    }
+
+    function renderTablaDespachos() {
+        despachosBody.innerHTML = '';
+        tiposCemento.forEach((tipo, idx) => {
+            const row = despachosBody.insertRow();
+            row.insertCell(0).innerHTML = `<input type="text" value="${tipo.nombre}" data-idx="${idx}" class="tipoNombreInput" style="width:100%">`;
+            row.insertCell(1).innerHTML = `<input type="number" step="0.01" value="0" data-idx="${idx}" class="tmInput" style="width:100%">`;
+            const btnCell = row.insertCell(2);
+            const delBtn = document.createElement('button');
+            delBtn.innerHTML = '<i class="fas fa-trash"></i>';
+            delBtn.className = 'btn-secondary';
+            delBtn.style.padding = '4px 8px';
+            delBtn.onclick = () => { tiposCemento.splice(idx,1); renderTablaDespachos(); };
+            btnCell.appendChild(delBtn);
+        });
+        document.querySelectorAll('.tipoNombreInput').forEach(inp => {
+            inp.addEventListener('change', (e) => {
+                const idx = parseInt(e.target.dataset.idx);
+                tiposCemento[idx].nombre = e.target.value;
+            });
+        });
+    }
+
+    function renderTablaMaquinas() {
+        maquinasBody.innerHTML = '';
+        maquinas.forEach((maq, idx) => {
+            const row = maquinasBody.insertRow();
+            row.insertCell(0).innerText = maq.nombre;
+            row.insertCell(1).innerHTML = `<input type="number" step="0.01" value="0" data-maq="${maq.id}" class="horasMaquina">`;
+            row.insertCell(2).innerHTML = `<input type="number" step="1" value="0" data-maq="${maq.id}" class="ratioECS">`;
+            row.insertCell(3).innerText = maq.ratioIdeal;
+            row.insertCell(4).innerHTML = `<span class="rendimiento" data-maq="${maq.id}">0%</span>`;
+            row.insertCell(5).innerHTML = `<span class="utilizacion" data-maq="${maq.id}">0%</span>`;
+            row.insertCell(6).innerHTML = `<input type="text" data-maq="${maq.id}" class="comentarioTecnico" style="width:150px;">`;
+            row.insertCell(7).innerHTML = `
+                <select data-maq="${maq.id}" class="estadoCritico">
+                    <option value="verde">🟢 Operativo</option>
+                    <option value="amarillo">🟡 En reparación</option>
+                    <option value="rojo">🔴 Avería reportada</option>
+                </select>
+            `;
+        });
+        document.querySelectorAll('.horasMaquina, .ratioECS').forEach(inp => {
+            inp.addEventListener('input', function() { calcularRendimientoUtilizacion(this.dataset.maq); });
+        });
+    }
+
+    function calcularRendimientoUtilizacion(maqId) {
+        const maq = maquinas.find(m => m.id === maqId);
+        if (!maq) return;
+        const horas = parseFloat(document.querySelector(`.horasMaquina[data-maq="${maqId}"]`).value) || 0;
+        const ratio = parseFloat(document.querySelector(`.ratioECS[data-maq="${maqId}"]`).value) || 0;
+        const rendimiento = (ratio / maq.ratioIdeal) * 100;
+        const utilizacion = (horas / 24) * 100;
+        document.querySelector(`.rendimiento[data-maq="${maqId}"]`).innerText = rendimiento.toFixed(1) + '%';
+        document.querySelector(`.utilizacion[data-maq="${maqId}"]`).innerText = utilizacion.toFixed(1) + '%';
+    }
+
+    function renderTemporales() {
+        temporalesContainer.innerHTML = '';
+        temporales.forEach((temp, idx) => {
+            const div = document.createElement('div');
+            div.className = 'flex-row';
+            div.style.alignItems = 'center';
+            div.innerHTML = `
+                <div style="flex:2"><strong>${temp.nombre}</strong><br>Capacidad: ${temp.capacidad} TM</div>
+                <div style="flex:1"><label>Inventario actual (TM):</label><input type="number" step="0.01" value="${temp.inventario}" data-idx="${idx}" class="inventarioTemp"></div>
+                <div style="flex:1"><span>% lleno: <span id="llenoTemp${idx}">0%</span></span></div>
+            `;
+            temporalesContainer.appendChild(div);
+            const inputInv = div.querySelector('.inventarioTemp');
+            inputInv.addEventListener('input', () => {
+                const inv = parseFloat(inputInv.value) || 0;
+                const pct = (inv / temp.capacidad) * 100;
+                div.querySelector(`#llenoTemp${idx}`).innerText = pct.toFixed(1) + '%';
+                temp.inventario = inv;
+            });
+            const invIni = temp.inventario || 0;
+            inputInv.value = invIni;
+            const pctIni = (invIni / temp.capacidad) * 100;
+            div.querySelector(`#llenoTemp${idx}`).innerText = pctIni.toFixed(1) + '%';
+        });
+    }
+
+    function renderCompuertas() {
+        compuertasContainer.innerHTML = '';
+        const table = document.createElement('table');
+        table.className = 'table-responsive';
+        table.innerHTML = `<thead><tr><th>Compuerta</th><th>Horas trabajadas</th><th>Comentario (falla/chuceada/normal)</th></tr></thead><tbody id="compuertasBody"></tbody>`;
+        compuertasContainer.appendChild(table);
+        const body = document.getElementById('compuertasBody');
+        compuertas.forEach((c, idx) => {
+            const row = body.insertRow();
+            row.insertCell(0).innerText = `Compuerta ${c.numero}`;
+            row.insertCell(1).innerHTML = `<input type="number" step="0.5" value="${c.horas}" data-idx="${idx}" class="horasCompuerta">`;
+            row.insertCell(2).innerHTML = `<input type="text" value="${c.comentario}" data-idx="${idx}" class="comentarioCompuerta" style="width:100%">`;
+        });
+        document.querySelectorAll('.horasCompuerta').forEach(inp => {
+            inp.addEventListener('change', (e) => { compuertas[e.target.dataset.idx].horas = parseFloat(e.target.value) || 0; });
+        });
+        document.querySelectorAll('.comentarioCompuerta').forEach(inp => {
+            inp.addEventListener('change', (e) => { compuertas[e.target.dataset.idx].comentario = e.target.value; });
+        });
+    }
+
+    function actualizarTotalVehiculos() {
+        const llamado = parseFloat(vehiculosLlamado.value) || 0;
+        const proceso = parseFloat(vehiculosProceso.value) || 0;
+        const playa = parseFloat(vehiculosPlaya.value) || 0;
+        totalVehiculosSpan.innerText = llamado + proceso + playa;
+    }
+    vehiculosLlamado.addEventListener('input', actualizarTotalVehiculos);
+    vehiculosProceso.addEventListener('input', actualizarTotalVehiculos);
+    vehiculosPlaya.addEventListener('input', actualizarTotalVehiculos);
+
+    async function calcularAcumuladoMes(fechaStr) {
+        const [year, month] = fechaStr.split('-');
+        const start = `${year}-${month}-01`;
+        const end = new Date(year, month, 0).toISOString().slice(0,10);
+        const snapshot = await datosDiariosCol.where('fecha', '>=', start).where('fecha', '<=', end).get();
+        let total = 0;
+        snapshot.forEach(doc => {
+            const desp = doc.data().despachos || [];
+            total += desp.reduce((s, item) => s + (parseFloat(item.tm) || 0), 0);
+        });
+        const ajuste = parseFloat(ajusteAcumulado.value) || 0;
+        acumuladoMesReg.value = (total + ajuste).toFixed(2);
+        return total + ajuste;
+    }
+
+    async function guardarDatos() {
+        const fecha = document.getElementById('fechaDashboard').value;
+        if (!fecha) return toast("Seleccione una fecha", true);
+        const despachos = [];
+        document.querySelectorAll('.tmInput').forEach((input, idx) => {
+            const tm = parseFloat(input.value) || 0;
+            despachos.push({ tipo: tiposCemento[idx].nombre, tm: tm });
+        });
+        const maquinasData = maquinas.map(m => ({
+            id: m.id, nombre: m.nombre, horasMaquina: parseFloat(document.querySelector(`.horasMaquina[data-maq="${m.id}"]`).value) || 0,
+            ratioECS: parseInt(document.querySelector(`.ratioECS[data-maq="${m.id}"]`).value) || 0,
+            ratioIdeal: m.ratioIdeal,
+            comentario: document.querySelector(`.comentarioTecnico[data-maq="${m.id}"]`).value || '',
+            averiaCritica: document.querySelector(`.estadoCritico[data-maq="${m.id}"]`).value
+        }));
+        const temporalesData = temporales.map(t => ({ nombre: t.nombre, capacidad: t.capacidad, inventario: t.inventario }));
+        const compuertasData = compuertas.map(c => ({ numero: c.numero, horas: c.horas, comentario: c.comentario }));
+        const data = {
+            fecha: fecha,
+            despachos: despachos,
+            maquinas: maquinasData,
+            temporales: temporalesData,
+            compuertas: compuertasData,
+            vehiculos: {
+                llamado: parseFloat(vehiculosLlamado.value) || 0,
+                proceso: parseFloat(vehiculosProceso.value) || 0,
+                playa: parseFloat(vehiculosPlaya.value) || 0
+            },
+            acumuladoAjuste: parseFloat(ajusteAcumulado.value) || 0,
+            comentarioGeneral: comentarioGeneral.value,
+            timestamp: firebase.firestore.FieldValue.serverTimestamp()
+        };
+        await datosDiariosCol.doc(fecha).set(data, { merge: true });
+        toast(`Datos guardados para ${fecha}`);
+        await calcularAcumuladoMes(fecha);
+    }
+
+    async function cargarDatosFecha() {
+        const fecha = document.getElementById('fechaDashboard').value;
+        const doc = await datosDiariosCol.doc(fecha).get();
+        if (!doc.exists) {
+            toast(`No hay datos para ${fecha}. Inicie un registro nuevo.`);
+            return;
+        }
+        const data = doc.data();
+        if (data.despachos) {
+            data.despachos.forEach((d, idx) => {
+                if (idx < tiposCemento.length && d.tipo === tiposCemento[idx].nombre)
+                    document.querySelectorAll('.tmInput')[idx].value = d.tm;
+            });
+        }
+        if (data.maquinas) {
+            data.maquinas.forEach(m => {
+                document.querySelector(`.horasMaquina[data-maq="${m.id}"]`).value = m.horasMaquina;
+                document.querySelector(`.ratioECS[data-maq="${m.id}"]`).value = m.ratioECS;
+                document.querySelector(`.comentarioTecnico[data-maq="${m.id}"]`).value = m.comentario || '';
+                document.querySelector(`.estadoCritico[data-maq="${m.id}"]`).value = m.averiaCritica || 'verde';
+                calcularRendimientoUtilizacion(m.id);
+            });
+        }
+        if (data.temporales) {
+            data.temporales.forEach(t => {
+                const temp = temporales.find(tmp => tmp.nombre === t.nombre);
+                if (temp) temp.inventario = t.inventario;
+            });
+            renderTemporales();
+        }
+        if (data.compuertas) {
+            data.compuertas.forEach(c => {
+                const comp = compuertas.find(cmp => cmp.numero === c.numero);
+                if (comp) { comp.horas = c.horas; comp.comentario = c.comentario; }
+            });
+            renderCompuertas();
+        }
+        if (data.vehiculos) {
+            vehiculosLlamado.value = data.vehiculos.llamado || 0;
+            vehiculosProceso.value = data.vehiculos.proceso || 0;
+            vehiculosPlaya.value = data.vehiculos.playa || 0;
+            actualizarTotalVehiculos();
+        }
+        ajusteAcumulado.value = data.acumuladoAjuste || 0;
+        comentarioGeneral.value = data.comentarioGeneral || '';
+        await calcularAcumuladoMes(fecha);
+        toast(`Datos cargados para ${fecha}`);
+    }
+
+    // ======================= DASHBOARD =======================
+    async function cargarKPIs(fechaStr) {
+        const doc = await datosDiariosCol.doc(fechaStr).get();
+        if (!doc.exists) { toast(`No hay datos para ${fechaStr}`, true); return; }
+        const data = doc.data();
+        const despachos = data.despachos || [];
+        const totalDia = despachos.reduce((s, d) => s + (parseFloat(d.tm) || 0), 0);
+        const planMensual = planes.planMensual || 0;
+        const porcentajePlan = planMensual ? ((totalDia / planMensual) * 100).toFixed(1) : 'N/D';
+        const [year, month] = fechaStr.split('-');
+        const start = `${year}-${month}-01`;
+        const end = new Date(year, month, 0).toISOString().slice(0,10);
+        const mesSnapshot = await datosDiariosCol.where('fecha', '>=', start).where('fecha', '<=', end).get();
+        let acumuladoMes = 0;
+        mesSnapshot.forEach(d => {
+            const desp = d.data().despachos || [];
+            acumuladoMes += desp.reduce((s, item) => s + (parseFloat(item.tm) || 0), 0);
+        });
+        let fechaAnt = new Date(fechaStr); fechaAnt.setMonth(fechaAnt.getMonth()-1);
+        const startAnt = `${fechaAnt.getFullYear()}-${(fechaAnt.getMonth()+1).toString().padStart(2,'0')}-01`;
+        const endAnt = new Date(fechaAnt.getFullYear(), fechaAnt.getMonth()+1, 0).toISOString().slice(0,10);
+        const antSnapshot = await datosDiariosCol.where('fecha', '>=', startAnt).where('fecha', '<=', endAnt).get();
+        let acumuladoMesAnt = 0;
+        antSnapshot.forEach(d => {
+            const desp = d.data().despachos || [];
+            acumuladoMesAnt += desp.reduce((s, item) => s + (parseFloat(item.tm) || 0), 0);
+        });
+        let vsMesAnt = acumuladoMesAnt ? ((acumuladoMes - acumuladoMesAnt) / acumuladoMesAnt * 100).toFixed(1) : 'N/D';
+        const maquinasData = data.maquinas || [];
+        let rendProm = 0;
+        if (maquinasData.length) {
+            const sum = maquinasData.reduce((s, m) => s + ((m.ratioECS / m.ratioIdeal) * 100), 0);
+            rendProm = (sum / maquinasData.length).toFixed(1);
+        }
+        document.getElementById('kpiCards').innerHTML = `
+            <div class="kpi-card"><div class="kpi-value">${totalDia.toFixed(2)} TM</div><div class="kpi-label">Despacho del día</div></div>
+            <div class="kpi-card"><div class="kpi-value">${porcentajePlan}%</div><div class="kpi-label">vs Plan Mensual</div></div>
+            <div class="kpi-card"><div class="kpi-value">${acumuladoMes.toFixed(2)} TM</div><div class="kpi-label">Acumulado Mes</div></div>
+            <div class="kpi-card"><div class="kpi-value">${vsMesAnt !== 'N/D' ? vsMesAnt+'%' : 'N/D'}</div><div class="kpi-label">vs Mes Anterior</div></div>
+            <div class="kpi-card"><div class="kpi-value">${rendProm}%</div><div class="kpi-label">Rendimiento Promedio Máquinas</div></div>
+        `;
+        document.getElementById('acumuladoMesKpi').innerText = acumuladoMes.toFixed(2) + ' TM';
+        const tbody = document.getElementById('despachoKpiBody');
+        tbody.innerHTML = '';
+        despachos.forEach(d => {
+            const tm = parseFloat(d.tm) || 0;
+            const pct = totalDia ? (tm / totalDia * 100).toFixed(1) : 0;
+            const row = tbody.insertRow();
+            row.insertCell(0).innerText = d.tipo;
+            row.insertCell(1).innerText = tm.toFixed(2);
+            row.insertCell(2).innerText = pct + '%';
+            if (pct > 10) row.classList.add('highlight');
+        });
+        await cargarGraficoEvolucion(fechaStr);
+        const resMaq = document.getElementById('resumenMaquinas');
+        resMaq.innerHTML = `<div class="table-responsive"><table><thead><tr><th>Máquina</th><th>Horas</th><th>Ratio ECS</th><th>Rendimiento</th><th>Estado</th></tr></thead><tbody>
+            ${maquinasData.map(m => {
+                let estadoHtml = '';
+                if (m.averiaCritica === 'rojo') estadoHtml = '<span class="status-badge status-red"></span> Avería reportada';
+                else if (m.averiaCritica === 'amarillo') estadoHtml = '<span class="status-badge status-yellow"></span> En reparación';
+                else estadoHtml = '<span class="status-badge status-green"></span> Operativo';
+                return `<tr><td>${m.nombre}</td><td>${m.horasMaquina}</td><td>${m.ratioECS}</td><td>${((m.ratioECS/m.ratioIdeal)*100).toFixed(1)}%</td><td>${estadoHtml}</td></tr>`;
+            }).join('')}
+        </tbody></table></div>`;
+        const comps = data.compuertas || [];
+        const resSilo = document.getElementById('resumenSilo8');
+        resSilo.innerHTML = `<div class="table-responsive">\n<table>\n<thead>\n<tr><th>Compuerta</th><th>Horas trabajadas</th><th>Comentario</th></tr>\n</thead>\n<tbody>\n${comps.map(c => `<tr><td>Compuerta ${c.numero}</td><td>${c.horas}</td><td>${c.comentario || '-'}</td></tr>`).join('')}\n</tbody>\n</table>\n</div>`;
+    }
+
+    function getPlanDiario(fechaStr) {
+        if (planesEspeciales[fechaStr] !== undefined) return planesEspeciales[fechaStr];
+        const diasSemana = { 1: 'Lunes', 2: 'Martes', 3: 'Miércoles', 4: 'Jueves', 5: 'Viernes', 6: 'Sábado', 0: 'Domingo' };
+        const fecha = new Date(fechaStr);
+        const diaSemana = diasSemana[fecha.getDay()];
+        return planSemanal[diaSemana] || 0;
+    }
+
+    async function cargarGraficoEvolucion(fechaStr) {
+        const fecha = new Date(fechaStr);
+        const ultimos7 = [];
+        for (let i = 6; i >= 0; i--) {
+            const d = new Date(fecha);
+            d.setDate(fecha.getDate() - i);
+            ultimos7.push(d.toISOString().slice(0,10));
+        }
+        const labels = [], valores = [], planesDias = [];
+        for (const f of ultimos7) {
+            const doc = await datosDiariosCol.doc(f).get();
+            let total = 0;
+            if (doc.exists) {
+                const desp = doc.data().despachos || [];
+                total = desp.reduce((s, item) => s + (parseFloat(item.tm) || 0), 0);
+            }
+            labels.push(f.slice(5));
+            valores.push(total);
+            planesDias.push(getPlanDiario(f));
+        }
+        const ctx = document.getElementById('evolucionChart').getContext('2d');
+        if (chartInstance) chartInstance.destroy();
+        chartInstance = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [
+                    { label: 'Despacho real (TM)', data: valores, backgroundColor: '#034694' },
+                    { label: 'Plan diario (TM)', data: planesDias, type: 'line', borderColor: '#eab308', borderDash: [5,5], fill: false, tension: 0.1 }
+                ]
+            },
+            options: { responsive: true, maintainAspectRatio: true }
+        });
+    }
+
+    // ======================= CONFIGURACIÓN UI =======================
+    function renderPlanSemanal() {
+        const container = document.getElementById('planSemanalContainer');
+        container.innerHTML = '';
+        const dias = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
+        dias.forEach(dia => {
+            const div = document.createElement('div');
+            div.style.minWidth = '120px';
+            div.innerHTML = `<label>${dia}:</label><input type="number" step="1" value="${planSemanal[dia] || 0}" data-dia="${dia}" class="planSemanalInput">`;
+            container.appendChild(div);
+        });
+        document.querySelectorAll('.planSemanalInput').forEach(inp => {
+            inp.addEventListener('change', (e) => {
+                const dia = e.target.dataset.dia;
+                planSemanal[dia] = parseFloat(e.target.value) || 0;
+            });
+        });
+    }
+
+    async function guardarPlanSemanal() {
+        await configCol.doc('planSemanal').set(planSemanal);
+        toast("Plan semanal guardado");
+        cargarKPIs(document.getElementById('fechaDashboard').value);
+    }
+
+    function renderPlanesEspeciales() {
+        const container = document.getElementById('listaPlanesEspeciales');
+        container.innerHTML = '';
+        const fechas = Object.keys(planesEspeciales).sort();
+        if (fechas.length === 0) {
+            container.innerHTML = '<p>No hay planes especiales definidos.</p>';
+            return;
+        }
+        const table = document.createElement('table');
+        table.className = 'table-responsive';
+        table.innerHTML = `<thead><tr><th>Fecha</th><th>Plan especial (TM)</th><th></th></tr></thead><tbody id="tablaPlanesEspeciales"></tbody>`;
+        container.appendChild(table);
+        const tbody = document.getElementById('tablaPlanesEspeciales');
+        fechas.forEach(fecha => {
+            const row = tbody.insertRow();
+            row.insertCell(0).innerText = fecha;
+            row.insertCell(1).innerHTML = `<input type="number" value="${planesEspeciales[fecha]}" data-fecha="${fecha}" class="planEspValorInput">`;
+            const btnCell = row.insertCell(2);
+            const delBtn = document.createElement('button');
+            delBtn.innerHTML = '<i class="fas fa-trash"></i>';
+            delBtn.className = 'btn-secondary';
+            delBtn.style.padding = '4px 8px';
+            delBtn.onclick = () => {
+                delete planesEspeciales[fecha];
+                renderPlanesEspeciales();
+            };
+            btnCell.appendChild(delBtn);
+        });
+        document.querySelectorAll('.planEspValorInput').forEach(inp => {
+            inp.addEventListener('change', (e) => {
+                const fecha = e.target.dataset.fecha;
+                planesEspeciales[fecha] = parseFloat(e.target.value) || 0;
+            });
+        });
+    }
+
+    async function agregarPlanEspecial() {
+        const fecha = document.getElementById('fechaPlanEspecial').value;
+        const valor = parseFloat(document.getElementById('planEspecialValor').value);
+        if (!fecha || isNaN(valor)) { toast("Seleccione fecha y valor válido", true); return; }
+        planesEspeciales[fecha] = valor;
+        renderPlanesEspeciales();
+        document.getElementById('fechaPlanEspecial').value = '';
+        document.getElementById('planEspecialValor').value = '';
+        toast("Plan especial agregado (aún no guardado en BD)");
+    }
+
+    async function guardarPlanesEspeciales() {
+        await configCol.doc('planesEspeciales').set(planesEspeciales);
+        toast("Planes especiales guardados");
+        cargarKPIs(document.getElementById('fechaDashboard').value);
+    }
+
+    function renderConfigTipos() {
+        const container = document.getElementById('tiposCementoList');
+        container.innerHTML = '';
+        tiposCemento.forEach((t, idx) => {
+            const div = document.createElement('div');
+            div.className = 'flex-row';
+            div.style.marginBottom = '8px';
+            div.innerHTML = `
+                <div style="flex:4"><input type="text" value="${t.nombre}" data-idx="${idx}" class="configTipoInput"></div>
+                <div style="flex:1"><button class="btn-secondary" data-idx="${idx}" style="padding:6px 12px;">Eliminar</button></div>
+            `;
+            container.appendChild(div);
+        });
+        document.querySelectorAll('.configTipoInput').forEach(inp => {
+            inp.addEventListener('change', (e) => {
+                const idx = parseInt(e.target.dataset.idx);
+                tiposCemento[idx].nombre = e.target.value;
+            });
+        });
+        document.querySelectorAll('#tiposCementoList .btn-secondary').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const idx = parseInt(e.target.dataset.idx);
+                tiposCemento.splice(idx,1);
+                renderConfigTipos();
+                renderTablaDespachos();
+            });
+        });
+    }
+
+    function renderDatosFijos() {
+        const listaTemp = document.getElementById('listaTemporalesFijos');
+        listaTemp.innerHTML = '';
+        temporales.forEach(t => {
+            const li = document.createElement('li');
+            li.textContent = `${t.nombre}: ${t.capacidad} TM`;
+            listaTemp.appendChild(li);
+        });
+        const listaMaq = document.getElementById('listaMaquinasFijas');
+        listaMaq.innerHTML = '';
+        maquinas.forEach(m => {
+            const li = document.createElement('li');
+            li.textContent = `${m.nombre}: Ratio Ideal = ${m.ratioIdeal}`;
+            listaMaq.appendChild(li);
+        });
+    }
+
+    async function guardarConfiguracionGeneral() {
+        // Solo guardamos planes y tipos
+        await configCol.doc('tiposCemento').set({ lista: tiposCemento });
+        const planMensual = parseFloat(document.getElementById('planMensual').value) || 0;
+        const planAnual = parseFloat(document.getElementById('planAnual').value) || 0;
+        await configCol.doc('planes').set({ planMensual, planAnual });
+        planes.planMensual = planMensual;
+        planes.planAnual = planAnual;
+        toast("Planes y tipos guardados correctamente");
+        renderTablaDespachos();
+        cargarKPIs(document.getElementById('fechaDashboard').value);
+    }
+
+    // Eventos
+    document.getElementById('guardarBtn').addEventListener('click', guardarDatos);
+    document.getElementById('cargarBtn').addEventListener('click', cargarDatosFecha);
+    document.getElementById('agregarTipoDespacho').addEventListener('click', () => { tiposCemento.push({ nombre: "Nuevo tipo" }); renderTablaDespachos(); });
+    document.getElementById('agregarTipoConfig').addEventListener('click', () => { tiposCemento.push({ nombre: "Nuevo tipo" }); renderConfigTipos(); renderTablaDespachos(); });
+    document.getElementById('guardarTiposBtn').addEventListener('click', guardarConfiguracionGeneral);
+    document.getElementById('guardarPlanesBtn').addEventListener('click', guardarConfiguracionGeneral);
+    document.getElementById('cargarDashboardBtn').addEventListener('click', () => { cargarKPIs(document.getElementById('fechaDashboard').value); });
+    document.getElementById('guardarPlanSemanalBtn').addEventListener('click', guardarPlanSemanal);
+    document.getElementById('agregarPlanEspecialBtn').addEventListener('click', agregarPlanEspecial);
+    document.getElementById('guardarPlanesEspecialesBtn').addEventListener('click', guardarPlanesEspeciales);
+    document.getElementById('fechaDashboard').valueAsDate = new Date();
+
+    // Tabs
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+            document.getElementById(btn.dataset.tab).classList.add('active');
+            if (btn.dataset.tab === 'kpis') cargarKPIs(document.getElementById('fechaDashboard').value);
+            if (btn.dataset.tab === 'config') { renderConfigTipos(); renderPlanSemanal(); renderPlanesEspeciales(); renderDatosFijos(); }
+        });
+    });
+
+    loadConfig().then(() => {
+        cargarDatosFecha();
+        cargarKPIs(new Date().toISOString().slice(0,10));
+        actualizarTotalVehiculos();
+    });
+</script>
+</body>
+</html>
