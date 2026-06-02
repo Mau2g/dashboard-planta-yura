@@ -13,16 +13,30 @@ sobre **Supabase/Postgres**, con captura manual y enfoque analítico, y un **red
 
 No se usa Firebase. No hay selector de vistas. Rutas raíz: `/` (dashboard) y `/registro`.
 
-## 2. Alcance funcional (superset del original)
-- **Despacho por tipo** con **bolsas + TM + % participación** y **peso promedio**.
+## 2. Alcance funcional (PARIDAD TOTAL con index.html + superset)
+
+**Regla:** toda función del `index.html` original debe seguir disponible. Lo nuevo se suma, no reemplaza.
+
+### Paridad con index.html (obligatorio)
+- **Registro Diario:** despacho por tipo, temporales (inventario, % lleno), máquinas
+  embolsadoras (horas, ratio ECS, ratio ideal, rendimiento, utilización, comentario,
+  estado 🟢🟡🔴), Silo 8 (8 compuertas), vehículos (llamado/proceso/playa/total),
+  **acumulado del mes (auto + ajuste manual)**, comentario general, guardar/cargar por fecha.
+- **Dashboard KPIs:** los **5 KPIs originales** — despacho del día, **% vs plan mensual**,
+  **acumulado mes**, **vs mes anterior**, **rendimiento promedio máquinas** — tabla de
+  participación con destacado >10%, **evolución 7 días real vs plan diario**,
+  **resumen de máquinas (rendimiento + estado)**, **resumen Silo 8 (horas por compuerta)**.
+- **Configuración (apartado completo):** **plan diario por día de semana**, **planes
+  especiales por fecha** (agregar/editar/eliminar), **plan mensual y anual**, **lista maestra
+  de tipos de cemento** (agregar/editar/eliminar), **datos fijos** (capacidades de temporales
+  y ratios ideales, solo lectura).
+
+### Extensiones nuevas (superset)
+- Despacho por tipo con **bolsas + TM** (no solo TM) y **peso promedio**; familia por tipo.
 - **Ventas** del día: nacional / exportación / a construir, con totales.
 - **Despacho por familia** (IP, HE, HS, MS, GU, TIPO I, BLANCO, FILLER…) con donut.
 - **Comparativa multi-anual 2024/2025/2026** por mes (histórico sembrado del Excel) y
-  **plan vs real** mensual.
-- **Operativo** (captura completa): máquinas embolsadoras (horas, ratio ECS, ratio ideal,
-  rendimiento, utilización, operativos, comentario, estado 🟢🟡🔴), temporales (inventario,
-  % lleno), Silo 8 (8 compuertas), vehículos (llamado/proceso/playa), planes
-  (semanal / especiales / mensual / anual), tipos de cemento (lista maestra con familia).
+  **plan vs real** mensual; operativo añade **operativos** por máquina.
 
 ## 3. Dirección de diseño "Operations Cockpit"
 Estilo **Data-Dense Dashboard**, refinado e industrial, con identidad Yura. Claro por
@@ -88,7 +102,10 @@ tokens semánticos light/dark, `@supabase/supabase-js`, Chart.js v4, `lucide-sve
 (lógica pura en `calc.ts`). Tipos TS autogenerados del esquema.
 
 ## 8. Criterios de aceptación
-- App única en `/` y `/registro`, sin Firebase ni selector de vistas.
+- App única en `/`, `/registro` y `/config`, sin Firebase ni selector de vistas.
+- **Paridad index.html verificada:** Configuración completa (plan semanal/especial/mensual/anual,
+  tipos editables, datos fijos), y Dashboard con los 5 KPIs originales + evolución 7 días vs plan
+  + resumen máquinas + resumen Silo 8.
 - Captura completa persiste en Supabase; analítica (familia, %, comparativa, plan vs real)
   funcional con histórico sembrado.
 - Diseño "Operations Cockpit" aplicado: tipografía, tokens, light/dark, blueprint.

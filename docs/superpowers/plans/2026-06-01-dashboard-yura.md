@@ -8,7 +8,7 @@
 
 **Tech Stack:** SvelteKit, Svelte 5 (runes), TypeScript, Vite, `@sveltejs/adapter-static`, Tailwind CSS v4, `@supabase/supabase-js`, Chart.js v4, `lucide-svelte`, Vitest. Fuentes: Archivo (display), IBM Plex Sans (cuerpo), IBM Plex Mono (datos).
 
-**No Firebase. Sin selector de vistas.** Rutas: `/` (dashboard), `/registro`.
+**No Firebase. Sin selector de vistas.** Rutas: `/` (dashboard), `/registro`, `/config`. **Paridad total con index.html** (incluida Configuración) + extensiones.
 
 **Referencia:** `index.html` y los Excel en la raíz. Seed extraído de `02. Reporte Despacho Dia 2025v1 (004).xlsx` (hojas `21.05` y `Plan ventas 2026`).
 
@@ -48,6 +48,7 @@ src/
     +layout.ts             # ssr=false, prerender=false
     +page.svelte           # dashboard
     registro/+page.svelte
+    config/+page.svelte
 supabase/migrations/{0001_schema,0002_views,0003_seed}.sql
 .env / .env.example
 ```
@@ -215,6 +216,7 @@ export interface ParteCompleto {
 export interface TipoB { id: number; nombre: string; familia: string; presentacion: string; orden: number; }
 export type PlanSemanal = Record<string, number>;
 export type PlanesEspeciales = Record<string, number>;
+export interface Planes { planMensual: number; planAnual: number; }
 ```
 
 - [ ] **Step 2: `src/lib/constants.ts`**
@@ -264,7 +266,7 @@ git commit -m "feat: tipos y constantes de dominio"
 
 ```ts
 import { describe, it, expect } from 'vitest';
-import { rendimiento, utilizacion, porcentajeLleno, pesoPromedioKg, variacionPct, cumplimiento, totalTm, totalBolsas, pivotComparativa } from './calc';
+import { rendimiento, utilizacion, porcentajeLleno, pesoPromedioKg, variacionPct, cumplimiento, totalTm, totalBolsas, pivotComparativa, rendimientoPromedio, planDiario } from './calc';
 
 describe('rendimiento', () => {
   it('ratioECS/ratioIdeal en %', () => expect(rendimiento(3171, 4300)).toBeCloseTo(73.744, 2));
@@ -303,6 +305,17 @@ describe('pivotComparativa', () => {
     expect(r[1]).toEqual({ mes: 2, valores: { 2024: 200 } });
   });
 });
+describe('rendimientoPromedio', () => {
+  it('promedia el rendimiento de las máquinas', () =>
+    expect(rendimientoPromedio([{ ratio_ecs: 2400, ratio_ideal: 2400 }, { ratio_ecs: 1800, ratio_ideal: 3600 }])).toBe(75));
+  it('0 si no hay máquinas', () => expect(rendimientoPromedio([])).toBe(0));
+});
+describe('planDiario', () => {
+  const ps = { Lunes: 6675, Martes: 9401, Miércoles: 9333, Jueves: 9361, Viernes: 7985, Sábado: 6720, Domingo: 5810 };
+  it('el plan especial gana', () => expect(planDiario('2026-05-21', ps, { '2026-05-21': 12345 })).toBe(12345));
+  it('usa el plan semanal por día (2026-05-21 es jueves)', () => expect(planDiario('2026-05-21', ps, {})).toBe(9361));
+  it('0 si el día no está configurado', () => expect(planDiario('2026-05-21', {}, {})).toBe(0));
+});
 ```
 
 - [ ] **Step 2: Verificar fallo**
@@ -315,6 +328,8 @@ Expected: FAIL (no existe `./calc`).
 - [ ] **Step 3: `src/lib/calc.ts`**
 
 ```ts
+import { DIA_POR_INDICE } from './constants';
+
 export function rendimiento(ratioECS: number, ratioIdeal: number): number {
   return ratioIdeal ? (ratioECS / ratioIdeal) * 100 : 0;
 }
@@ -332,6 +347,18 @@ export function pivotComparativa(rows: FilaComparativa[]): MesPivot[] {
   const m = new Map<number, Record<number, number>>();
   for (const r of rows) { if (!m.has(r.mes)) m.set(r.mes, {}); m.get(r.mes)![r.anio] = r.despacho_tm; }
   return [...m.keys()].sort((a, b) => a - b).map((mes) => ({ mes, valores: m.get(mes)! }));
+}
+
+export function rendimientoPromedio(maquinas: { ratio_ecs: number; ratio_ideal: number }[]): number {
+  if (!maquinas.length) return 0;
+  return maquinas.reduce((s, m) => s + rendimiento(m.ratio_ecs, m.ratio_ideal), 0) / maquinas.length;
+}
+
+// Plan especial (por fecha) gana sobre el plan semanal (por día de semana).
+export function planDiario(fecha: string, semanal: Record<string, number>, especiales: Record<string, number>): number {
+  if (especiales[fecha] !== undefined) return especiales[fecha];
+  const dia = DIA_POR_INDICE[new Date(fecha).getDay()];
+  return semanal[dia] || 0;
 }
 ```
 
@@ -612,7 +639,7 @@ git commit -m "feat: seed real del Excel (tipos+familia, histórico, plan)"
 
 ```ts
 import { getSupabase } from './supabase/client';
-import type { ParteCompleto, TipoB } from './types';
+import type { ParteCompleto, TipoB, PlanSemanal, PlanesEspeciales, Planes } from './types';
 
 export async function getTipos(): Promise<TipoB[]> {
   const { data, error } = await getSupabase().from('tipo_cemento')
@@ -691,6 +718,78 @@ export async function getUltimosDespachosDiarios(desde: string, hasta: string): 
   const m = new Map<string, number>();
   for (const r of (data ?? []) as { fecha: string; tm: number }[]) m.set(r.fecha, (m.get(r.fecha) ?? 0) + Number(r.tm || 0));
   return [...m.entries()].map(([fecha, tm]) => ({ fecha, tm })).sort((a, b) => a.fecha.localeCompare(b.fecha));
+}
+
+// ----- Configuración -----
+export async function getPlanSemanal(): Promise<PlanSemanal> {
+  const { data } = await getSupabase().from('plan_semanal').select('dia,tm');
+  const m: PlanSemanal = {};
+  for (const r of (data ?? []) as { dia: string; tm: number }[]) m[r.dia] = r.tm;
+  return m;
+}
+export async function guardarPlanSemanal(p: PlanSemanal): Promise<void> {
+  const rows = Object.entries(p).map(([dia, tm]) => ({ dia, tm }));
+  const { error } = await getSupabase().from('plan_semanal').upsert(rows, { onConflict: 'dia' });
+  if (error) throw error;
+}
+export async function getPlanesEspeciales(): Promise<PlanesEspeciales> {
+  const { data } = await getSupabase().from('plan_especial').select('fecha,tm');
+  const m: PlanesEspeciales = {};
+  for (const r of (data ?? []) as { fecha: string; tm: number }[]) m[r.fecha] = r.tm;
+  return m;
+}
+export async function guardarPlanEspecial(fecha: string, tm: number): Promise<void> {
+  const { error } = await getSupabase().from('plan_especial').upsert({ fecha, tm }, { onConflict: 'fecha' });
+  if (error) throw error;
+}
+export async function eliminarPlanEspecial(fecha: string): Promise<void> {
+  const { error } = await getSupabase().from('plan_especial').delete().eq('fecha', fecha);
+  if (error) throw error;
+}
+export async function getPlanAnual(anio: number): Promise<Planes> {
+  const { data } = await getSupabase().from('plan_anual').select('plan_mensual,plan_anual').eq('anio', anio).maybeSingle();
+  return { planMensual: data?.plan_mensual ?? 0, planAnual: data?.plan_anual ?? 0 };
+}
+export async function guardarPlanAnual(anio: number, planMensual: number, planAnual: number): Promise<void> {
+  const { error } = await getSupabase().from('plan_anual').upsert({ anio, plan_mensual: planMensual, plan_anual: planAnual }, { onConflict: 'anio' });
+  if (error) throw error;
+}
+export async function crearTipo(nombre: string, familia = 'OTRO', presentacion = 'bolsa42.5'): Promise<void> {
+  const { error } = await getSupabase().from('tipo_cemento').insert({ nombre, familia, presentacion });
+  if (error) throw error;
+}
+export async function actualizarTipo(id: number, campos: { nombre?: string; familia?: string }): Promise<void> {
+  const { error } = await getSupabase().from('tipo_cemento').update(campos).eq('id', id);
+  if (error) throw error;
+}
+export async function eliminarTipo(id: number): Promise<void> {
+  // borrado lógico (preserva integridad con despachos históricos)
+  const { error } = await getSupabase().from('tipo_cemento').update({ activo: false }).eq('id', id);
+  if (error) throw error;
+}
+
+// ----- Helpers de dashboard (paridad index.html) -----
+// Despacho mensual combinado (histórico 2024/25 + vivo 2026+); sin solape.
+export async function despachoMes(anio: number, mes: number): Promise<number> {
+  const { data } = await getSupabase().from('v_despacho_mensual').select('despacho_tm').eq('anio', anio).eq('mes', mes);
+  return (data ?? []).reduce((s: number, r: any) => s + Number(r.despacho_tm || 0), 0);
+}
+
+export interface MaquinaDiaRow { nombre: string; horas_maquina: number; ratio_ecs: number; ratio_ideal: number; averia_critica: string; }
+export async function getMaquinasDia(fecha: string): Promise<MaquinaDiaRow[]> {
+  const sb = getSupabase();
+  const { data: cab } = await sb.from('parte_diario').select('id').eq('fecha', fecha).maybeSingle();
+  if (!cab) return [];
+  const { data } = await sb.from('maquina_registro').select('maquina_id,horas_maquina,ratio_ecs,averia_critica,maquina(nombre,ratio_ideal)').eq('parte_id', cab.id);
+  return (data ?? []).map((m: any) => ({ nombre: m.maquina?.nombre ?? m.maquina_id, horas_maquina: m.horas_maquina, ratio_ecs: m.ratio_ecs, ratio_ideal: m.maquina?.ratio_ideal ?? 0, averia_critica: m.averia_critica }));
+}
+
+export async function getCompuertasDia(fecha: string): Promise<{ numero: number; horas: number; comentario: string }[]> {
+  const sb = getSupabase();
+  const { data: cab } = await sb.from('parte_diario').select('id').eq('fecha', fecha).maybeSingle();
+  if (!cab) return [];
+  const { data } = await sb.from('compuerta_registro').select('numero,horas,comentario').eq('parte_id', cab.id).order('numero');
+  return (data ?? []) as { numero: number; horas: number; comentario: string }[];
 }
 ```
 
@@ -1010,12 +1109,13 @@ export const prerender = false;
   import { fechaSeleccionada } from '$lib/stores';
   import ThemeToggle from '$lib/components/ThemeToggle.svelte';
   import Toast from '$lib/components/Toast.svelte';
-  import { Factory, LayoutDashboard, ClipboardList } from 'lucide-svelte';
+  import { Factory, LayoutDashboard, ClipboardList, Settings } from 'lucide-svelte';
 
   let { children } = $props();
   const nav = [
     { href: '/', label: 'Dashboard', icon: LayoutDashboard },
-    { href: '/registro', label: 'Registro', icon: ClipboardList }
+    { href: '/registro', label: 'Registro', icon: ClipboardList },
+    { href: '/config', label: 'Configuración', icon: Settings }
   ];
   const activo = (href: string) => $page.url.pathname === href;
 </script>
@@ -1096,7 +1196,7 @@ git commit -m "feat: AppShell responsive (sidebar escritorio, bottom-nav móvil,
   import { toast } from '$lib/components/toastStore';
   import { MAQUINAS, TEMPORALES } from '$lib/constants';
   import { rendimiento, utilizacion, porcentajeLleno, pesoPromedioKg, totalTm, totalBolsas } from '$lib/calc';
-  import { getTipos, guardarParte, cargarParte } from '$lib/repo';
+  import { getTipos, guardarParte, cargarParte, despachoMes } from '$lib/repo';
   import { fechaSeleccionada } from '$lib/stores';
   import { Save, RotateCcw } from 'lucide-svelte';
 
@@ -1111,19 +1211,24 @@ git commit -m "feat: AppShell responsive (sidebar escritorio, bottom-nav móvil,
   let veh = $state({ llamado: 0, proceso: 0, playa: 0 });
   let acumuladoAjuste = $state(0);
   let comentario = $state('');
+  let acumMes = $state(0);
 
   const tm = $derived(totalTm(lineas));
   const bolsas = $derived(totalBolsas(lineas));
   const ventaTotal = $derived((Number(venta.nacional_tm) || 0) + (Number(venta.export_tm) || 0));
   const totalVeh = $derived((Number(veh.llamado) || 0) + (Number(veh.proceso) || 0) + (Number(veh.playa) || 0));
+  const acumuladoConAjuste = $derived(acumMes + (Number(acumuladoAjuste) || 0));
 
   let tipos: { id: number; nombre: string; familia: string }[] = [];
   onMount(async () => { tipos = await getTipos(); await recargar(); cargando = false; });
   $effect(() => { $fechaSeleccionada; if (!cargando) recargar(); });
 
   async function recargar() {
+    const fecha = get(fechaSeleccionada);
+    const [y, mo] = fecha.split('-').map(Number);
+    acumMes = await despachoMes(y, mo);
     lineas = tipos.map((t) => ({ tipo_id: t.id, nombre: t.nombre, familia: t.familia, bolsas: 0, tm: 0 }));
-    const p = await cargarParte(get(fechaSeleccionada));
+    const p = await cargarParte(fecha);
     if (!p) {
       venta = { nacional_tm: 0, export_tm: 0, a_construir_tm: 0 };
       maquinas = MAQUINAS.map((m) => ({ maquina_id: m.id, nombre: m.nombre, ratio_ideal: m.ratio_ideal, horas_maquina: 0, ratio_ecs: 0, operativos: 0, comentario: '', averia_critica: 'verde' }));
@@ -1262,7 +1367,13 @@ git commit -m "feat: AppShell responsive (sidebar escritorio, bottom-nav móvil,
       <label class="text-sm">Playa<input type="number" inputmode="numeric" class="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 font-data" bind:value={veh.playa} /></label>
       <div class="flex items-end font-bold">Total: <span class="ml-1 font-data">{totalVeh}</span></div>
     </div>
-    <label class="mt-4 block text-sm">Ajuste acumulado<input type="number" inputmode="numeric" class="mt-1 w-full max-w-xs rounded-lg border border-border bg-surface px-3 py-2 font-data" bind:value={acumuladoAjuste} /></label>
+    <div class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div>
+        <span class="block text-sm">Acumulado del mes (auto + ajuste)</span>
+        <div class="mt-1 rounded-lg border border-border bg-surface-2 px-3 py-2 font-data font-bold">{acumuladoConAjuste.toFixed(2)} TM</div>
+      </div>
+      <label class="block text-sm">Ajuste manual del acumulado<input type="number" inputmode="numeric" class="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 font-data" bind:value={acumuladoAjuste} /></label>
+    </div>
     <label class="mt-4 block text-sm">Comentario general<textarea rows="2" class="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2" bind:value={comentario}></textarea></label>
   </SectionCard>
 
@@ -1301,29 +1412,51 @@ git commit -m "feat: página Registro (captura completa, responsive, autosave UX
   import ChartCard from '$lib/components/ChartCard.svelte';
   import Skeleton from '$lib/components/Skeleton.svelte';
   import EmptyState from '$lib/components/EmptyState.svelte';
-  import { totalTm, totalBolsas, cumplimiento, pivotComparativa } from '$lib/calc';
+  import { totalTm, totalBolsas, cumplimiento, pivotComparativa, rendimiento, rendimientoPromedio, variacionPct, planDiario } from '$lib/calc';
   import { MESES_CORTOS } from '$lib/constants';
   import {
     getParticipacionDia, getDespachoPorFamilia, getComparativaAnual, getPlanVsReal, getUltimosDespachosDiarios,
-    type ParticipacionRow, type FamiliaRow, type ComparativaRow, type PlanVsRealRow
+    getMaquinasDia, getCompuertasDia, getPlanAnual, getPlanSemanal, getPlanesEspeciales, despachoMes,
+    type ParticipacionRow, type FamiliaRow, type ComparativaRow, type PlanVsRealRow, type MaquinaDiaRow
   } from '$lib/repo';
   import { fechaSeleccionada } from '$lib/stores';
+  import type { PlanSemanal, PlanesEspeciales, Planes } from '$lib/types';
 
   let cargando = $state(true);
   let parti = $state<ParticipacionRow[]>([]);
   let familias = $state<FamiliaRow[]>([]);
   let comparativa = $state<ComparativaRow[]>([]);
   let planVsReal = $state<PlanVsRealRow[]>([]);
-  let spark = $state<number[]>([]);
+  let maquinas = $state<MaquinaDiaRow[]>([]);
+  let compuertas = $state<{ numero: number; horas: number; comentario: string }[]>([]);
+  let planes = $state<Planes>({ planMensual: 0, planAnual: 0 });
+  let planSemanal = $state<PlanSemanal>({});
+  let planesEspeciales = $state<PlanesEspeciales>({});
+  let acumMes = $state(0);
+  let acumMesAnt = $state(0);
+  let evol = $state<{ label: string; real: number; plan: number }[]>([]);
 
   const tmDia = $derived(totalTm(parti));
   const bolsasDia = $derived(totalBolsas(parti));
-  const cumplAnual = $derived(cumplimiento(planVsReal.reduce((s, r) => s + Number(r.real_tm || 0), 0), planVsReal.reduce((s, r) => s + Number(r.plan_tm || 0), 0)));
+  const pctPlanMensual = $derived(planes.planMensual ? (tmDia / planes.planMensual) * 100 : 0);
+  const vsMesAnt = $derived(variacionPct(acumMes, acumMesAnt));
+  const rendProm = $derived(rendimientoPromedio(maquinas.map((m) => ({ ratio_ecs: m.ratio_ecs, ratio_ideal: m.ratio_ideal }))));
+  const sparkReal = $derived(evol.map((e) => e.real));
 
   // CSS vars -> color para Chart.js
-  function cssVar(name: string) {
-    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-  }
+  function cssVar(name: string) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+
+  const chartEvolucion = $derived.by(() => ({
+    type: 'bar' as const,
+    data: {
+      labels: evol.map((e) => e.label),
+      datasets: [
+        { label: 'Despacho real (TM)', data: evol.map((e) => e.real), backgroundColor: cssVar('--c-primary') || '#034694' },
+        { label: 'Plan diario (TM)', type: 'line' as const, data: evol.map((e) => e.plan), borderColor: cssVar('--c-accent') || '#d97706', borderDash: [5, 5], fill: false, tension: 0.1 }
+      ]
+    },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' as const } } }
+  }));
 
   const chartComparativa = $derived.by(() => {
     const pivot = pivotComparativa(comparativa);
@@ -1355,12 +1488,21 @@ git commit -m "feat: página Registro (captura completa, responsive, autosave UX
     cargando = true;
     const fecha = get(fechaSeleccionada);
     const anio = Number(fecha.slice(0, 4));
+    const [y, mo] = fecha.split('-').map(Number);
     const d = new Date(fecha); const desde = new Date(d); desde.setDate(d.getDate() - 6);
-    [parti, familias, comparativa, planVsReal] = await Promise.all([
-      getParticipacionDia(fecha), getDespachoPorFamilia(fecha), getComparativaAnual(), getPlanVsReal(anio)
+    const [pp, ff, cc, pvr, serie, maq, comp, am, plA, plS, plE] = await Promise.all([
+      getParticipacionDia(fecha), getDespachoPorFamilia(fecha), getComparativaAnual(), getPlanVsReal(anio),
+      getUltimosDespachosDiarios(desde.toISOString().slice(0, 10), fecha), getMaquinasDia(fecha), getCompuertasDia(fecha),
+      despachoMes(y, mo), getPlanAnual(anio), getPlanSemanal(), getPlanesEspeciales()
     ]);
-    const serie = await getUltimosDespachosDiarios(desde.toISOString().slice(0, 10), fecha);
-    spark = serie.map((s) => s.tm);
+    parti = pp; familias = ff; comparativa = cc; planVsReal = pvr; maquinas = maq; compuertas = comp;
+    acumMes = am; planes = plA; planSemanal = plS; planesEspeciales = plE;
+    const mAnt = mo === 1 ? 12 : mo - 1, yAnt = mo === 1 ? y - 1 : y;
+    acumMesAnt = await despachoMes(yAnt, mAnt);
+    const dias: string[] = [];
+    for (let i = 6; i >= 0; i--) { const x = new Date(d); x.setDate(d.getDate() - i); dias.push(x.toISOString().slice(0, 10)); }
+    const real = new Map(serie.map((s) => [s.fecha, s.tm]));
+    evol = dias.map((f) => ({ label: f.slice(5), real: real.get(f) ?? 0, plan: planDiario(f, planSemanal, planesEspeciales) }));
     cargando = false;
   }
 </script>
@@ -1368,31 +1510,84 @@ git commit -m "feat: página Registro (captura completa, responsive, autosave UX
 <h1 class="mb-5 text-xl font-extrabold text-ink lg:text-2xl">Dashboard — {$fechaSeleccionada}</h1>
 
 {#if cargando}
-  <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">{#each Array(4) as _}<Skeleton class="h-28 rounded-2xl" />{/each}</div>
+  <div class="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">{#each Array(6) as _}<Skeleton class="h-28 rounded-2xl" />{/each}</div>
   <Skeleton class="mt-5 h-72 rounded-2xl" />
 {:else}
-  <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
-    <KPICard label="Despacho del día" value={tmDia} decimals={2} suffix=" TM" spark={spark} />
+  <!-- KPIs originales del index.html + bolsas -->
+  <div class="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
+    <KPICard label="Despacho del día" value={tmDia} decimals={2} suffix=" TM" spark={sparkReal} />
+    <KPICard label="vs Plan Mensual" value={pctPlanMensual} decimals={1} suffix="%" />
+    <KPICard label="Acumulado Mes" value={acumMes} decimals={2} suffix=" TM" />
+    <KPICard label="vs Mes Anterior" value={vsMesAnt} decimals={1} suffix="%" />
+    <KPICard label="Rendimiento Máquinas" value={rendProm} decimals={1} suffix="%" />
     <KPICard label="Bolsas del día" value={bolsasDia} />
-    <KPICard label="Familias despachadas" value={familias.length} />
-    <KPICard label="Cumplimiento plan (año)" value={cumplAnual} decimals={1} suffix="%" />
   </div>
 
-  <div class="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-2">
+  <div class="mt-5">
+    <SectionCard title="Evolución últimos 7 días — real vs plan diario">
+      <ChartCard config={chartEvolucion} />
+    </SectionCard>
+  </div>
+
+  <div class="grid grid-cols-1 gap-5 lg:grid-cols-2">
     <SectionCard title="Despacho por familia">
       {#if familias.length}<ChartCard config={chartFamilias} />
       {:else}<EmptyState titulo="Sin datos del día" descripcion="Registra el parte para ver el desglose por familia." />{/if}
     </SectionCard>
 
-    <SectionCard title="Participación por tipo">
+    <SectionCard title="Despachos del día (TM) — alta demanda destacada (>10%)">
       {#if parti.length}
         <ResponsiveTable
           columns={[ {key:'tipo',label:'Tipo'}, {key:'familia',label:'Familia'}, {key:'bolsas',label:'Bolsas',mono:true}, {key:'tm',label:'TM',mono:true}, {key:'pct',label:'%',mono:true} ]}
           rows={parti.map((p) => ({ tipo: p.tipo, familia: p.familia, bolsas: p.bolsas, tm: Number(p.tm).toFixed(2), pct: Number(p.pct).toFixed(1) + '%', _hot: p.pct > 10 }))}
           rowClass={(r) => r._hot ? 'bg-warning/10 font-semibold text-warning' : ''} />
+        <div class="mt-3 text-sm"><strong>Acumulado del mes:</strong> <span class="font-data">{acumMes.toFixed(2)}</span> TM</div>
       {:else}<EmptyState titulo="Sin despachos" />{/if}
     </SectionCard>
   </div>
+
+  <!-- Resumen máquinas (paridad index.html) con estado -->
+  <SectionCard title="Resumen máquinas (rendimiento y estado)">
+    {#if maquinas.length}
+      <div class="hidden overflow-x-auto md:block">
+        <table class="w-full border-collapse text-sm">
+          <thead><tr class="border-b border-border text-left text-muted-ink">
+            <th class="px-3 py-2">Máquina</th><th class="px-3 py-2">Horas</th><th class="px-3 py-2">Ratio ECS</th><th class="px-3 py-2">Rendimiento</th><th class="px-3 py-2">Estado</th>
+          </tr></thead>
+          <tbody>
+            {#each maquinas as m}
+              <tr class="border-b border-border">
+                <td class="px-3 py-2 font-semibold">{m.nombre}</td>
+                <td class="px-3 py-2 font-data">{m.horas_maquina}</td>
+                <td class="px-3 py-2 font-data">{m.ratio_ecs}</td>
+                <td class="px-3 py-2 font-data">{rendimiento(m.ratio_ecs, m.ratio_ideal).toFixed(1)}%</td>
+                <td class="px-3 py-2"><StatusBadge estado={m.averia_critica} /></td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      </div>
+      <div class="flex flex-col gap-2 md:hidden">
+        {#each maquinas as m}
+          <div class="rounded-xl border border-border bg-surface-2/40 p-3">
+            <div class="mb-1 flex items-center justify-between font-semibold"><span>{m.nombre}</span><StatusBadge estado={m.averia_critica} /></div>
+            <div class="flex justify-between text-sm text-muted-ink"><span>Horas</span><span class="font-data text-ink">{m.horas_maquina}</span></div>
+            <div class="flex justify-between text-sm text-muted-ink"><span>Ratio ECS</span><span class="font-data text-ink">{m.ratio_ecs}</span></div>
+            <div class="flex justify-between text-sm text-muted-ink"><span>Rendimiento</span><span class="font-data text-ink">{rendimiento(m.ratio_ecs, m.ratio_ideal).toFixed(1)}%</span></div>
+          </div>
+        {/each}
+      </div>
+    {:else}<EmptyState titulo="Sin datos de máquinas" descripcion="Registra el parte del día." />{/if}
+  </SectionCard>
+
+  <!-- Resumen Silo 8 (paridad index.html) -->
+  <SectionCard title="Resumen Silo 8 — horas por compuerta">
+    {#if compuertas.length}
+      <ResponsiveTable
+        columns={[ {key:'comp',label:'Compuerta'}, {key:'horas',label:'Horas trabajadas',mono:true}, {key:'com',label:'Comentario'} ]}
+        rows={compuertas.map((c) => ({ comp: `Compuerta ${c.numero}`, horas: c.horas, com: c.comentario || '-' }))} />
+    {:else}<EmptyState titulo="Sin datos de Silo 8" />{/if}
+  </SectionCard>
 
   <SectionCard title="Comparativa de despacho mensual por año">
     <ChartCard config={chartComparativa} />
@@ -1405,36 +1600,183 @@ git commit -m "feat: página Registro (captura completa, responsive, autosave UX
         rows={planVsReal.map((r) => ({ mes: MESES_CORTOS[r.mes-1], plan: Number(r.plan_tm).toFixed(0), real: Number(r.real_tm).toFixed(0), cumpl: Number(r.cumplimiento_pct).toFixed(1) + '%' }))} />
     {:else}<EmptyState titulo="Sin plan cargado" />{/if}
   </SectionCard>
-
-  <SectionCard title="Estado de máquinas (último parte del día)">
-    {#if parti.length}
-      <p class="text-sm text-muted-ink">Consulta el detalle operativo en la pestaña Registro.</p>
-    {:else}<EmptyState titulo="Sin datos operativos" />{/if}
-  </SectionCard>
 {/if}
 ```
-
-> Nota: el resumen de estado de máquinas en el dashboard se mantiene mínimo (el detalle vive en Registro). Si se requiere el cuadro completo con `StatusBadge`, añadir una consulta a `maquina_registro` por fecha y renderizar con `ResponsiveTable` + `StatusBadge`. `StatusBadge` ya está importado para esa extensión.
 
 - [ ] **Step 2: Build** (`npm run build`) — Expected: correcto.
 - [ ] **Step 3: Commit**
 
 ```bash
 git add src/routes/+page.svelte
-git commit -m "feat: dashboard (KPIs animados, donut familias, comparativa multi-anual, plan vs real)"
+git commit -m "feat: dashboard (5 KPIs, evolución 7d vs plan, resumen máquinas y Silo 8, donut familias, comparativa multi-anual, plan vs real)"
 ```
 
 ---
 
-## Task 13: Verificación final
+## Task 13: Página Configuración (paridad index.html)
+
+**Files:** Create `src/routes/config/+page.svelte`.
+
+- [ ] **Step 1: Implementar `src/routes/config/+page.svelte`**
+
+```svelte
+<script lang="ts">
+  import { onMount } from 'svelte';
+  import { get } from 'svelte/store';
+  import SectionCard from '$lib/components/SectionCard.svelte';
+  import Skeleton from '$lib/components/Skeleton.svelte';
+  import { toast } from '$lib/components/toastStore';
+  import { MAQUINAS, TEMPORALES, DIAS_SEMANA } from '$lib/constants';
+  import {
+    getTipos, crearTipo, actualizarTipo, eliminarTipo,
+    getPlanSemanal, guardarPlanSemanal, getPlanesEspeciales, guardarPlanEspecial, eliminarPlanEspecial,
+    getPlanAnual, guardarPlanAnual
+  } from '$lib/repo';
+  import { fechaSeleccionada } from '$lib/stores';
+  import type { TipoB, PlanSemanal, PlanesEspeciales } from '$lib/types';
+  import { Save, Plus, Trash2 } from 'lucide-svelte';
+
+  const FAMILIAS = ['GU','IP','HE','HS','MS','TIPO I','BLANCO','FILLER','OTRO'];
+  let cargando = $state(true);
+  let tipos = $state<TipoB[]>([]);
+  let planSemanal = $state<PlanSemanal>({});
+  let planesEspeciales = $state<PlanesEspeciales>({});
+  let planMensual = $state(0);
+  let planAnual = $state(0);
+  let nuevaFecha = $state('');
+  let nuevoValor = $state<number | null>(null);
+  let nuevoTipo = $state('');
+
+  const fechasEsp = $derived(Object.keys(planesEspeciales).sort());
+  const anio = $derived(Number(get(fechaSeleccionada).slice(0, 4)));
+
+  onMount(async () => { await recargar(); cargando = false; });
+
+  async function recargar() {
+    const a = Number(get(fechaSeleccionada).slice(0, 4));
+    const [t, ps, pe, pa] = await Promise.all([getTipos(), getPlanSemanal(), getPlanesEspeciales(), getPlanAnual(a)]);
+    tipos = t; planSemanal = { ...ps }; planesEspeciales = { ...pe };
+    planMensual = pa.planMensual; planAnual = pa.planAnual;
+    for (const d of DIAS_SEMANA) if (planSemanal[d] === undefined) planSemanal[d] = 0;
+  }
+
+  async function salvarSemanal() { await guardarPlanSemanal($state.snapshot(planSemanal)); toast('Plan semanal guardado'); }
+  async function salvarAnual() { await guardarPlanAnual(anio, Number(planMensual) || 0, Number(planAnual) || 0); toast('Planes mensual/anual guardados'); }
+
+  async function addEspecial() {
+    if (!nuevaFecha || nuevoValor === null || isNaN(Number(nuevoValor))) return toast('Seleccione fecha y valor válido', true);
+    await guardarPlanEspecial(nuevaFecha, Number(nuevoValor));
+    planesEspeciales = { ...planesEspeciales, [nuevaFecha]: Number(nuevoValor) };
+    nuevaFecha = ''; nuevoValor = null; toast('Plan especial guardado');
+  }
+  async function quitarEspecial(fecha: string) {
+    await eliminarPlanEspecial(fecha);
+    const { [fecha]: _, ...resto } = planesEspeciales; planesEspeciales = resto; toast('Plan especial eliminado');
+  }
+
+  async function addTipo() {
+    const nombre = nuevoTipo.trim();
+    if (!nombre) return toast('Escriba un nombre de tipo', true);
+    await crearTipo(nombre); nuevoTipo = ''; await recargar(); toast('Tipo agregado');
+  }
+  async function salvarTipo(t: TipoB) { await actualizarTipo(t.id, { nombre: t.nombre, familia: t.familia }); toast('Tipo actualizado'); }
+  async function quitarTipo(id: number) { await eliminarTipo(id); tipos = tipos.filter((x) => x.id !== id); toast('Tipo eliminado'); }
+</script>
+
+<h1 class="mb-5 text-xl font-extrabold text-ink lg:text-2xl">Configuración</h1>
+
+{#if cargando}
+  <div class="flex flex-col gap-3">{#each Array(4) as _}<Skeleton class="h-40 rounded-2xl" />{/each}</div>
+{:else}
+  <SectionCard title="Plan diario por día de semana (TM)">
+    <div class="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
+      {#each DIAS_SEMANA as dia}
+        <label class="text-sm">{dia}<input type="number" inputmode="numeric" class="mt-1 w-full rounded-lg border border-border bg-surface px-2 py-2 font-data" bind:value={planSemanal[dia]} /></label>
+      {/each}
+    </div>
+    <button onclick={salvarSemanal} class="mt-3 inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2 text-sm font-bold text-on-primary"><Save size={16} /> Guardar plan semanal</button>
+  </SectionCard>
+
+  <SectionCard title="Plan especial para fecha específica (TM)">
+    <div class="flex flex-wrap items-end gap-3">
+      <label class="text-sm">Fecha<input type="date" class="mt-1 block rounded-lg border border-border bg-surface px-3 py-2" bind:value={nuevaFecha} /></label>
+      <label class="text-sm">Plan (TM)<input type="number" inputmode="numeric" class="mt-1 block w-32 rounded-lg border border-border bg-surface px-3 py-2 font-data" bind:value={nuevoValor} /></label>
+      <button onclick={addEspecial} class="inline-flex items-center gap-2 rounded-full bg-surface-2 px-4 py-2 text-sm font-bold text-ink"><Plus size={16} /> Agregar/Actualizar</button>
+    </div>
+    <div class="mt-4">
+      {#if fechasEsp.length === 0}
+        <p class="text-sm text-muted-ink">No hay planes especiales definidos.</p>
+      {:else}
+        <div class="flex flex-col gap-2">
+          {#each fechasEsp as f}
+            <div class="flex items-center gap-3 rounded-lg border border-border px-3 py-2">
+              <span class="font-data">{f}</span>
+              <span class="font-data text-muted-ink">{planesEspeciales[f]} TM</span>
+              <button onclick={() => quitarEspecial(f)} aria-label="Eliminar" class="ml-auto grid h-9 w-9 place-items-center rounded-lg bg-surface-2 text-danger"><Trash2 size={16} /></button>
+            </div>
+          {/each}
+        </div>
+      {/if}
+    </div>
+  </SectionCard>
+
+  <SectionCard title="Planes mensual y anual (TM)">
+    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <label class="text-sm">Plan mensual<input type="number" inputmode="numeric" class="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 font-data" bind:value={planMensual} /></label>
+      <label class="text-sm">Plan anual<input type="number" inputmode="numeric" class="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 font-data" bind:value={planAnual} /></label>
+    </div>
+    <button onclick={salvarAnual} class="mt-3 inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2 text-sm font-bold text-on-primary"><Save size={16} /> Guardar planes</button>
+  </SectionCard>
+
+  <SectionCard title="Tipos de cemento (lista maestra)">
+    <div class="mb-3 flex flex-wrap items-end gap-2">
+      <label class="flex-1 text-sm">Nuevo tipo<input class="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2" bind:value={nuevoTipo} placeholder="Nombre del tipo" /></label>
+      <button onclick={addTipo} class="inline-flex items-center gap-2 rounded-full bg-surface-2 px-4 py-2 text-sm font-bold text-ink"><Plus size={16} /> Agregar</button>
+    </div>
+    <div class="flex flex-col gap-2">
+      {#each tipos as t (t.id)}
+        <div class="flex flex-wrap items-center gap-2 rounded-lg border border-border px-3 py-2">
+          <input class="min-w-0 flex-1 rounded-lg border border-border bg-surface px-2 py-1.5 text-sm" bind:value={t.nombre} />
+          <select class="rounded-lg border border-border bg-surface px-2 py-1.5 text-sm" bind:value={t.familia}>
+            {#each FAMILIAS as fa}<option value={fa}>{fa}</option>{/each}
+          </select>
+          <button onclick={() => salvarTipo(t)} aria-label="Guardar tipo" class="grid h-9 w-9 place-items-center rounded-lg bg-primary text-on-primary"><Save size={16} /></button>
+          <button onclick={() => quitarTipo(t.id)} aria-label="Eliminar tipo" class="grid h-9 w-9 place-items-center rounded-lg bg-surface-2 text-danger"><Trash2 size={16} /></button>
+        </div>
+      {/each}
+    </div>
+  </SectionCard>
+
+  <SectionCard title="Datos fijos del sistema">
+    <p class="mb-1 font-semibold">Capacidades de temporales (fijas):</p>
+    <ul class="mb-3 ml-5 list-disc text-sm text-muted-ink">{#each TEMPORALES as t}<li>{t.nombre}: {t.capacidad} TM</li>{/each}</ul>
+    <p class="mb-1 font-semibold">Ratios ideales de máquinas (fijos):</p>
+    <ul class="ml-5 list-disc text-sm text-muted-ink">{#each MAQUINAS as m}<li>{m.nombre}: Ratio Ideal = {m.ratio_ideal}</li>{/each}</ul>
+    <p class="mt-2 text-xs text-muted-ink">Valores predefinidos; no se modifican desde la interfaz.</p>
+  </SectionCard>
+{/if}
+```
+
+- [ ] **Step 2: Build** (`npm run build`) — Expected: correcto.
+- [ ] **Step 3: Commit**
+
+```bash
+git add src/routes/config/+page.svelte
+git commit -m "feat: página Configuración (plan semanal/especial/mensual-anual, tipos editables, datos fijos)"
+```
+
+---
+
+## Task 14: Verificación final
 
 - [ ] **Step 1: Tests** — `npx vitest run` → PASS (`calc.test.ts`). Eliminar tests demo del scaffold si sobran.
 - [ ] **Step 2: Typecheck + build** — `npm run check && npm run build` → sin errores.
 - [ ] **Step 3: Verificación manual** — `npm run preview` y comprobar:
-  - **Responsive** a 375 / 768 / 1024 / 1440: sidebar en ≥1024, bottom-nav en <1024, tablas → tarjetas en móvil, sin scroll horizontal.
+  - **Responsive** a 375 / 768 / 1024 / 1440: sidebar en ≥1024, bottom-nav (3 ítems) en <1024, tablas → tarjetas en móvil, sin scroll horizontal.
   - **Tema**: toggle claro/oscuro persiste y sin flash al recargar; contraste legible en ambos.
-  - **Dashboard**: KPIs con contador animado + sparkline, donut de familias, comparativa multi-anual (2024/2025 sembrados), plan vs real.
-  - **Registro**: capturar y guardar; recargar fecha → persiste en Supabase; totales en vivo.
+  - **Dashboard (paridad index.html)**: los **5 KPIs** (despacho día, % vs plan mensual, acumulado mes, vs mes anterior, rendimiento máquinas) + bolsas; **evolución 7 días real vs plan**; **resumen máquinas con estado**; **resumen Silo 8**; además donut familias, comparativa multi-anual (2024/2025 sembrados), plan vs real.
+  - **Registro**: capturar y guardar; recargar fecha → persiste en Supabase; totales en vivo; **acumulado del mes (auto + ajuste)** visible.
+  - **Configuración (paridad index.html)**: plan semanal, planes especiales (agregar/eliminar), plan mensual/anual, tipos (agregar/editar/eliminar), datos fijos.
   - **Reduced-motion** activado: sin animaciones bruscas.
 - [ ] **Step 4: Verificar datos** — MCP `execute_sql`: `select * from v_despacho_por_familia where fecha='<fecha>';` coherente.
 - [ ] **Step 5: README**
@@ -1444,7 +1786,7 @@ git commit -m "feat: dashboard (KPIs animados, donut familias, comparativa multi
 SvelteKit + Supabase. Captura manual y analítica de despacho de cemento.
 ## Desarrollo
 - `npm run dev` / `npm run build` / `npm run preview` / `npx vitest run`
-## Rutas: `/` (dashboard), `/registro`
+## Rutas: `/` (dashboard), `/registro`, `/config`
 ## Requiere `.env` con PUBLIC_SUPABASE_URL y PUBLIC_SUPABASE_ANON_KEY.
 ```
 
@@ -1459,9 +1801,14 @@ git commit -m "chore: verificación final, README y limpieza"
 
 ## Self-Review (completado por el autor del plan)
 
-- **Cobertura del spec:** captura completa + bolsas/ventas (Task 11); analítica familia/%/comparativa/plan-vs-real (Tasks 6/8/12); Supabase + seed real (Tasks 4–8); diseño Operations Cockpit con tokens light/dark, fuentes, blueprint (Task 1); responsive sidebar/bottom-nav + tablas→tarjetas (Tasks 9/10/11/12); interactividad: KPIs animados, sparkline, donut, comparativa, skeletons, toasts, tema (Tasks 9/12); cálculos con tests (Task 3). ✅
+- **Paridad index.html (verificada función por función):**
+  - Registro: despacho por tipo, temporales+%lleno, máquinas (rend/util/estado), Silo 8, vehículos+total, **acumulado mes auto+ajuste**, comentario, guardar/cargar → Task 11. ✅
+  - Dashboard: **5 KPIs** (despacho día, % vs plan mensual, acumulado mes, vs mes anterior, rendimiento promedio), participación con destacado >10%, **evolución 7d real vs plan**, **resumen máquinas+estado**, **resumen Silo 8** → Task 12. ✅
+  - Configuración: plan semanal, planes especiales (add/editar/eliminar), plan mensual/anual, **tipos editables (add/edit/delete)**, datos fijos → Task 13. ✅
+- **Cobertura de extensiones:** bolsas+ventas+familia (Tasks 11/12), comparativa multi-anual + plan vs real + seed real (Tasks 6/7/8/12). ✅
+- **Diseño/responsive/interacción:** tokens light/dark + fuentes + blueprint (Task 1); sidebar/bottom-nav (3 ítems) + tablas→tarjetas (Tasks 9/10/11/12); KPIs animados, sparkline, donut, skeletons, toasts, tema (Tasks 9/12/13). ✅
 - **Placeholders:** sin "TBD/TODO"; SQL y componentes completos; seed con valores reales. ✅
-- **Consistencia de tipos:** `ParteCompleto`, `TipoB`, `ParticipacionRow`, `FamiliaRow`, `ComparativaRow`, `PlanVsRealRow`, `FilaComparativa`/`pivotComparativa`, y props de componentes coinciden entre `repo.ts`, `calc.ts`, componentes y páginas. ✅
+- **Consistencia de tipos:** `ParteCompleto`, `TipoB`, `Planes`, `PlanSemanal`, `PlanesEspeciales`, `ParticipacionRow`, `FamiliaRow`, `ComparativaRow`, `PlanVsRealRow`, `MaquinaDiaRow`, y firmas (`planDiario`, `rendimientoPromedio`, `despachoMes`, `getMaquinasDia`, `getCompuertasDia`, `getPlan*`) coinciden entre `repo.ts`, `calc.ts`, componentes y páginas. ✅
 - **Accesibilidad:** focus/contraste por tokens AA, `aria-label` en botones de icono, `aria-live` en toasts, `prefers-reduced-motion` en CSS y CountUp, targets ≥44px, color + icono/signo (no color solo). ✅
-- **Notas:** RLS permisiva (deuda de seguridad, sin auth); histórico solo 2024/2025 (sin solape con cómputo en vivo 2026+); el cuadro completo de estado de máquinas en el dashboard se deja como extensión documentada (Task 12).
+- **Notas:** RLS permisiva (deuda de seguridad, sin auth); histórico solo 2024/2025 (sin solape con cómputo en vivo 2026+).
 ```
