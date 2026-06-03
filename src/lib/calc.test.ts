@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { rendimiento, utilizacion, porcentajeLleno, pesoPromedioKg, variacionPct, cumplimiento, totalTm, totalBolsas, pivotComparativa, rendimientoPromedio, planDiario } from './calc';
+import { rendimiento, utilizacion, porcentajeLleno, pesoPromedioKg, variacionPct, cumplimiento, totalTm, totalBolsas, pivotComparativa, rendimientoPromedio, planDiario, eficienciaOperativa, rendimientoEmbolsado, estadoEficiencia, horasEvaluadas } from './calc';
 
 describe('rendimiento', () => {
   it('ratioECS/ratioIdeal en %', () => expect(rendimiento(3171, 4300)).toBeCloseTo(73.744, 2));
@@ -48,4 +48,25 @@ describe('planDiario', () => {
   it('el plan especial gana', () => expect(planDiario('2026-05-21', ps, { '2026-05-21': 12345 })).toBe(12345));
   it('usa el plan semanal por día (2026-05-21 es jueves)', () => expect(planDiario('2026-05-21', ps, {})).toBe(9361));
   it('0 si el día no está configurado', () => expect(planDiario('2026-05-21', {}, {})).toBe(0));
+});
+describe('eficienciaOperativa', () => {
+  it('mantenimiento cuenta como productivo, solo la avería penaliza', () =>
+    expect(eficienciaOperativa({ horas_produccion: 20, horas_mantenimiento: 2, horas_averia: 2 })).toBeCloseTo(91.67, 1));
+  it('100% si no hay avería', () =>
+    expect(eficienciaOperativa({ horas_produccion: 22, horas_mantenimiento: 2, horas_averia: 0 })).toBe(100));
+  it('0 si no hay horas evaluadas', () =>
+    expect(eficienciaOperativa({ horas_produccion: 0, horas_mantenimiento: 0, horas_averia: 0 })).toBe(0));
+  it('horasEvaluadas suma los tres estados', () =>
+    expect(horasEvaluadas({ horas_produccion: 20, horas_mantenimiento: 2, horas_averia: 2 })).toBe(24));
+});
+describe('rendimientoEmbolsado', () => {
+  it('100% al ideal de 1 bolsa/segundo (3600/h)', () =>
+    expect(rendimientoEmbolsado(36000, 10)).toBe(100));
+  it('50% a la mitad del ideal', () => expect(rendimientoEmbolsado(18000, 10)).toBe(50));
+  it('0 si no hubo horas de producción', () => expect(rendimientoEmbolsado(5000, 0)).toBe(0));
+});
+describe('estadoEficiencia', () => {
+  it('verde ≥ 90', () => expect(estadoEficiencia(92)).toBe('verde'));
+  it('amarillo entre 70 y 90', () => expect(estadoEficiencia(80)).toBe('amarillo'));
+  it('rojo < 70', () => expect(estadoEficiencia(65)).toBe('rojo'));
 });

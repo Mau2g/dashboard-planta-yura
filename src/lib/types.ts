@@ -16,6 +16,17 @@ export interface ParteCompleto {
   compuertas: CompuertaReg[];
 }
 
+export interface ProductividadReg {
+  maquina_id: string;
+  nombre: string;
+  ratio_ideal: number;
+  horas_produccion: number;
+  horas_mantenimiento: number;
+  horas_averia: number;
+  bolsas: number;
+  comentario: string;
+}
+
 export interface TipoB { id: number; nombre: string; familia: string; presentacion: string; orden: number; }
 export type PlanSemanal = Record<string, number>;
 export type PlanesEspeciales = Record<string, number>;

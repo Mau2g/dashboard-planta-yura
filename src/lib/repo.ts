@@ -80,6 +80,44 @@ export async function getUltimosDespachosDiarios(desde: string, hasta: string): 
   return [...m.entries()].map(([fecha, tm]) => ({ fecha, tm })).sort((a, b) => a.fecha.localeCompare(b.fecha));
 }
 
+// ----- Productividad / eficiencia operativa de máquinas -----
+export interface ProductividadRow {
+  maquina_id: string;
+  horas_produccion: number;
+  horas_mantenimiento: number;
+  horas_averia: number;
+  bolsas: number;
+  comentario: string;
+}
+
+export async function getProductividadDia(fecha: string): Promise<ProductividadRow[]> {
+  const sb = getSupabase();
+  const { data: cab } = await sb.from('parte_diario').select('id').eq('fecha', fecha).maybeSingle();
+  if (!cab) return [];
+  const { data, error } = await sb.from('maquina_productividad')
+    .select('maquina_id,horas_produccion,horas_mantenimiento,horas_averia,bolsas,comentario')
+    .eq('parte_id', cab.id);
+  if (error) throw error;
+  return (data ?? []) as ProductividadRow[];
+}
+
+export async function guardarProductividad(fecha: string, rows: ProductividadRow[]): Promise<void> {
+  const sb = getSupabase();
+  // Asegura la cabecera del parte para la fecha (sin tocar otros campos si ya existe).
+  const { data: parte, error } = await sb.from('parte_diario')
+    .upsert({ fecha }, { onConflict: 'fecha' }).select('id').single();
+  if (error) throw error;
+  const id = parte.id as number;
+  await sb.from('maquina_productividad').delete().eq('parte_id', id);
+  const limpios = rows.filter((r) =>
+    Number(r.horas_produccion) || Number(r.horas_mantenimiento) || Number(r.horas_averia) || Number(r.bolsas) || r.comentario);
+  if (limpios.length) {
+    const { error: e } = await sb.from('maquina_productividad')
+      .insert(limpios.map((r) => ({ parte_id: id, ...r })));
+    if (e) throw e;
+  }
+}
+
 // ----- Configuración -----
 export async function getPlanSemanal(): Promise<PlanSemanal> {
   const { data } = await getSupabase().from('plan_semanal').select('dia,tm');
