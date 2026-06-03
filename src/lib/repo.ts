@@ -80,6 +80,37 @@ export async function getUltimosDespachosDiarios(desde: string, hasta: string): 
   return [...m.entries()].map(([fecha, tm]) => ({ fecha, tm })).sort((a, b) => a.fecha.localeCompare(b.fecha));
 }
 
+// ----- Datos horarios por máquina (export ECS) -----
+export interface MaquinaHoraRow {
+  fecha: string;
+  maquina_id: string;
+  maquina: string;
+  hora: number;
+  bolsas_acum: number;
+  bolsas_hora: number;
+  horas_operacion: number;
+  ratio_embolsado: number;
+  bolsas_rechazadas: number;
+  paletizadas_acum: number;
+  ratio_ideal: number;
+}
+
+// Fechas con datos horarios disponibles (para el selector).
+export async function getFechasMaquinaHora(): Promise<string[]> {
+  const { data, error } = await getSupabase().from('maquina_hora').select('fecha');
+  if (error) throw error;
+  return [...new Set((data ?? []).map((r: any) => r.fecha as string))].sort().reverse();
+}
+
+// Datos por hora de una fecha, opcionalmente filtrados por máquina.
+export async function getMaquinaHora(fecha: string, maquinaId?: string): Promise<MaquinaHoraRow[]> {
+  let q = getSupabase().from('v_maquina_hora').select('*').eq('fecha', fecha);
+  if (maquinaId && maquinaId !== 'TODAS') q = q.eq('maquina_id', maquinaId);
+  const { data, error } = await q.order('maquina_id').order('hora');
+  if (error) throw error;
+  return (data ?? []) as MaquinaHoraRow[];
+}
+
 // ----- Productividad / eficiencia operativa de máquinas -----
 export interface ProductividadRow {
   maquina_id: string;

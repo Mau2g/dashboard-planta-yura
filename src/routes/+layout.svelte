@@ -4,13 +4,14 @@
   import { fechaSeleccionada } from '$lib/stores';
   import ThemeToggle from '$lib/components/ThemeToggle.svelte';
   import Toast from '$lib/components/Toast.svelte';
-  import { Factory, LayoutDashboard, ClipboardList, Gauge, Settings } from 'lucide-svelte';
+  import { Factory, LayoutDashboard, ClipboardList, Gauge, Clock, Settings } from 'lucide-svelte';
 
   let { children } = $props();
   const nav = [
     { href: '/', label: 'Dashboard', icon: LayoutDashboard },
     { href: '/registro', label: 'Registro', icon: ClipboardList },
     { href: '/productividad', label: 'Productividad', icon: Gauge },
+    { href: '/horas', label: 'Por hora', icon: Clock },
     { href: '/config', label: 'Configuración', icon: Settings }
   ];
   const activo = (href: string) => $page.url.pathname === href;
