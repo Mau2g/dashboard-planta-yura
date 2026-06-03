@@ -1,6 +1,4 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
-  import { get } from 'svelte/store';
   import KPICard from '$lib/components/KPICard.svelte';
   import SectionCard from '$lib/components/SectionCard.svelte';
   import StatusBadge from '$lib/components/StatusBadge.svelte';
@@ -11,8 +9,7 @@
   import { totalTm, totalBolsas, cumplimiento, pivotComparativa, rendimiento, rendimientoPromedio, variacionPct, planDiario } from '$lib/calc';
   import { MESES_CORTOS } from '$lib/constants';
   import {
-    getParticipacionDia, getDespachoPorFamilia, getComparativaAnual, getPlanVsReal, getUltimosDespachosDiarios,
-    getMaquinasDia, getCompuertasDia, getPlanAnual, getPlanSemanal, getPlanesEspeciales, despachoMes,
+    getPanelDia,
     type ParticipacionRow, type FamiliaRow, type ComparativaRow, type PlanVsRealRow, type MaquinaDiaRow
   } from '$lib/repo';
   import { fechaSeleccionada } from '$lib/stores';
@@ -77,27 +74,22 @@
     options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' as const } } }
   }));
 
-  onMount(load);
-  $effect(() => { $fechaSeleccionada; load(); });
+  // Evita doble carga (onMount + $effect) y recargas concurrentes por la misma fecha.
+  let fechaCargada = '';
+  $effect(() => { const f = $fechaSeleccionada; if (f !== fechaCargada) load(f); });
 
-  async function load() {
+  async function load(fecha: string) {
+    fechaCargada = fecha;
     cargando = true;
-    const fecha = get(fechaSeleccionada);
-    const anio = Number(fecha.slice(0, 4));
-    const [y, mo] = fecha.split('-').map(Number);
-    const d = new Date(fecha); const desde = new Date(d); desde.setDate(d.getDate() - 6);
-    const [pp, ff, cc, pvr, serie, maq, comp, am, plA, plS, plE] = await Promise.all([
-      getParticipacionDia(fecha), getDespachoPorFamilia(fecha), getComparativaAnual(), getPlanVsReal(anio),
-      getUltimosDespachosDiarios(desde.toISOString().slice(0, 10), fecha), getMaquinasDia(fecha), getCompuertasDia(fecha),
-      despachoMes(y, mo), getPlanAnual(anio), getPlanSemanal(), getPlanesEspeciales()
-    ]);
-    parti = pp; familias = ff; comparativa = cc; planVsReal = pvr; maquinas = maq; compuertas = comp;
-    acumMes = am; planes = plA; planSemanal = plS; planesEspeciales = plE;
-    const mAnt = mo === 1 ? 12 : mo - 1, yAnt = mo === 1 ? y - 1 : y;
-    acumMesAnt = await despachoMes(yAnt, mAnt);
+    const d = new Date(`${fecha}T12:00:00`);
+    const p = await getPanelDia(fecha);  // una sola llamada: todo el dashboard
+    parti = p.participacion; familias = p.familias; comparativa = p.comparativa;
+    planVsReal = p.plan_vs_real; maquinas = p.maquinas; compuertas = p.compuertas;
+    acumMes = Number(p.acum_mes) || 0; acumMesAnt = Number(p.acum_mes_ant) || 0;
+    planes = p.plan; planSemanal = p.plan_semanal; planesEspeciales = p.plan_especiales;
     const dias: string[] = [];
     for (let i = 6; i >= 0; i--) { const x = new Date(d); x.setDate(d.getDate() - i); dias.push(x.toISOString().slice(0, 10)); }
-    const real = new Map(serie.map((s) => [s.fecha, s.tm]));
+    const real = new Map(p.serie7.map((s) => [s.fecha, Number(s.tm)]));
     evol = dias.map((f) => ({ label: f.slice(5), real: real.get(f) ?? 0, plan: planDiario(f, planSemanal, planesEspeciales) }));
     cargando = false;
   }

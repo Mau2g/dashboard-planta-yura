@@ -80,6 +80,27 @@ export async function getUltimosDespachosDiarios(desde: string, hasta: string): 
   return [...m.entries()].map(([fecha, tm]) => ({ fecha, tm })).sort((a, b) => a.fecha.localeCompare(b.fecha));
 }
 
+// ----- Panel del día (una sola llamada RPC; reemplaza ~13 consultas) -----
+export interface PanelDia {
+  participacion: ParticipacionRow[];
+  familias: FamiliaRow[];
+  maquinas: MaquinaDiaRow[];
+  compuertas: { numero: number; horas: number; comentario: string }[];
+  acum_mes: number;
+  acum_mes_ant: number;
+  plan: Planes;
+  plan_semanal: PlanSemanal;
+  plan_especiales: PlanesEspeciales;
+  plan_vs_real: PlanVsRealRow[];
+  comparativa: ComparativaRow[];
+  serie7: { fecha: string; tm: number }[];
+}
+export async function getPanelDia(fecha: string): Promise<PanelDia> {
+  const { data, error } = await getSupabase().rpc('panel_dia', { p_fecha: fecha });
+  if (error) throw error;
+  return data as PanelDia;
+}
+
 // ----- Datos horarios por máquina (export ECS) -----
 export interface MaquinaHoraRow {
   fecha: string;
